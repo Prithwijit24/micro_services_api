@@ -1,0 +1,40 @@
+# Secrets
+.env
+
+# Data volumes (persisted host-mounted data, not source)
+data/postgres/*
+data/neo4j/*
+data/redis/*
+data/chroma/*
+data/firecrawl/*
+data/browser/*
+data/youtube/*
+data/searxng/*
+data/uptime-kuma/*
+!data/**/.gitkeep
+
+# Downloaded HF models
+models/*
+!models/.gitkeep
+
+# Backups
+backups/*
+!backups/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Caddy
+caddy/access.log
