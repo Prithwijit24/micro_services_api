@@ -1,14 +1,5 @@
 name: ai-stack
 
-x-app-defaults: &app-defaults
-  restart: unless-stopped
-  networks:
-    - internal
-  environment:
-    HF_HOME: /root/.cache/huggingface
-    TRANSFORMERS_CACHE: /root/.cache/huggingface
-    HF_HUB_DISABLE_TELEMETRY: "1"
-
 x-healthcheck-defaults: &healthcheck-defaults
   interval: 30s
   timeout: 5s
@@ -16,236 +7,82 @@ x-healthcheck-defaults: &healthcheck-defaults
   start_period: 15s
 
 services:
-  # ---------------------------------------------------------------------
-  # Reverse proxy (only externally exposed component besides the gateway)
-  # ---------------------------------------------------------------------
-  caddy:
-    image: caddy:2.9-alpine
-    container_name: ai-stack-caddy
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - internal
-    depends_on:
-      - gateway
-
-  # ---------------------------------------------------------------------
-  # API Gateway - the only internal service allowed to be reached
-  # directly by the reverse proxy
-  # ---------------------------------------------------------------------
-  gateway:
-    build: ./services/gateway
-    container_name: ai-stack-gateway
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      - search
-      - crawl
-      - browser
-      - youtube
-      - embed
-      - clip
-      - reranker
-      - graph
-      - vector
-      - cache
-
-  # ---------------------------------------------------------------------
-  # Capability microservices
-  # ---------------------------------------------------------------------
-  search:
-    build: ./services/search
-    container_name: ai-stack-search
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      - searxng
-
-  crawl:
-    build: ./services/crawl
-    container_name: ai-stack-crawl
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      - firecrawl
-
-  browser:
-    build: ./services/browser
-    container_name: ai-stack-browser
-    <<: *app-defaults
-    env_file: .env
-    shm_size: "2gb"
-    expose:
-      - "8000"
-    volumes:
-      - ./data/browser:/data/browser
-    healthcheck:
-      <<: *healthcheck-defaults
-      start_period: 30s
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-
-  youtube:
-    build: ./services/youtube
-    container_name: ai-stack-youtube
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    volumes:
-      - ./data/youtube:/opt/data/youtube
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-
-  embed:
-    build: ./services/embed
-    container_name: ai-stack-embed
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    volumes:
-      - ./models:/root/.cache/huggingface
-    healthcheck:
-      <<: *healthcheck-defaults
-      start_period: 60s
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-
-  clip:
-    build: ./services/clip
-    container_name: ai-stack-clip
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    volumes:
-      - ./models:/root/.cache/huggingface
-    healthcheck:
-      <<: *healthcheck-defaults
-      start_period: 60s
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-
-  reranker:
-    build: ./services/reranker
-    container_name: ai-stack-reranker
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    volumes:
-      - ./models:/root/.cache/huggingface
-    healthcheck:
-      <<: *healthcheck-defaults
-      start_period: 60s
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-
-  graph:
-    build: ./services/graph
-    container_name: ai-stack-graph
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      neo4j:
-        condition: service_healthy
-
-  vector:
-    build: ./services/vector
-    container_name: ai-stack-vector
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      chromadb:
-        condition: service_healthy
-
-  cache:
-    build: ./services/cache
-    container_name: ai-stack-cache
-    <<: *app-defaults
-    env_file: .env
-    expose:
-      - "8000"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  # ---------------------------------------------------------------------
-  # Infrastructure services (never exposed externally)
-  # ---------------------------------------------------------------------
-  postgres:
-    image: postgres:17-alpine
-    container_name: ai-stack-postgres
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Application (single FastAPI container with all services)
+  # ──────────────────────────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: ai-stack-app
     restart: unless-stopped
     networks:
       - internal
     env_file: .env
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-aistack}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-aistack}
+      HF_HOME: /root/.cache/huggingface
+    shm_size: "2gb"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "1.5"
+    expose:
+      - "8000"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ./models:/root/.cache/huggingface
+      - ./data/browser:/data/browser
+      - ./data/youtube:/opt/data/youtube
+      - ./data/duckdb:/data/duckdb
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aistack}"]
+      start_period: 30s
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Redis (cache + message broker)
+  # ──────────────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.4-alpine
     container_name: ai-stack-redis
     restart: unless-stopped
     networks:
       - internal
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-changeme}"]
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     volumes:
       - ./data/redis:/data
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-changeme} ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Neo4j (graph database) — kept as-is per user requirement
+  # ──────────────────────────────────────────────────────────────────────────────
   neo4j:
     image: neo4j:5.26-community
     container_name: ai-stack-neo4j
     restart: unless-stopped
     networks:
       - internal
+    ports:
+      - "7687:7687"
+      - "7474:7474"
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_memory_pagecache_size: ${NEO4J_PAGECACHE:-512M}
-      NEO4J_dbms_memory_heap_max__size: ${NEO4J_HEAP_MAX:-1G}
+      NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-512M}
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-1G}
     volumes:
       - ./data/neo4j/data:/data
       - ./data/neo4j/logs:/logs
@@ -256,12 +93,21 @@ services:
       start_period: 30s
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # ChromaDB (vector database)
+  # ──────────────────────────────────────────────────────────────────────────────
   chromadb:
     image: chromadb/chroma:0.5.23
     container_name: ai-stack-chromadb
     restart: unless-stopped
     networks:
       - internal
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       IS_PERSISTENT: "TRUE"
       ANONYMIZED_TELEMETRY: "FALSE"
@@ -271,12 +117,21 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # SearXNG (meta search engine)
+  # ──────────────────────────────────────────────────────────────────────────────
   searxng:
     image: searxng/searxng:latest
     container_name: ai-stack-searxng
     restart: unless-stopped
     networks:
       - internal
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://localhost:8080/}
     volumes:
@@ -285,49 +140,70 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
 
-  firecrawl:
-    image: mendableai/firecrawl:latest
-    container_name: ai-stack-firecrawl
+  # ──────────────────────────────────────────────────────────────────────────────
+  # MinIO (S3-compatible file storage — for local filesystem access)
+  # ──────────────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: ai-stack-minio
     restart: unless-stopped
     networks:
       - internal
-    env_file: .env
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme}@redis:6379
-      PLAYWRIGHT_MICROSERVICE_URL: http://browser:8000
-      USE_DB_AUTHENTICATION: "false"
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:
-      - ./data/firecrawl:/app/data
-    depends_on:
-      redis:
-        condition: service_healthy
+      - ./data/minio:/data
     healthcheck:
       <<: *healthcheck-defaults
-      start_period: 30s
-      test: ["CMD-SHELL", "curl -f http://localhost:3002/test || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
 
-  # ---------------------------------------------------------------------
-  # Monitoring
-  # ---------------------------------------------------------------------
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: ai-stack-uptime-kuma
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Reverse proxy (Caddy)
+  # ──────────────────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2.9-alpine
+    container_name: ai-stack-caddy
     restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - internal
-    expose:
-      - "3001"
-    volumes:
-      - ./data/uptime-kuma:/app/data
+    depends_on:
+      - app
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Dozzle (lightweight log viewer)
+  # ──────────────────────────────────────────────────────────────────────────────
   dozzle:
     image: amir20/dozzle:latest
     container_name: ai-stack-dozzle
     restart: unless-stopped
     networks:
       - internal
-    expose:
-      - "8080"
+    ports:
+      - "127.0.0.1:8081:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 

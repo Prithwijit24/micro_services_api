@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backs up Postgres, Neo4j, ChromaDB, and Redis data into a single timestamped
+# Backs up Neo4j, ChromaDB, and Redis data into a single timestamped
 # tarball under ./backups. Meant to be invoked via `make backup`.
 set -euo pipefail
 
@@ -9,10 +9,6 @@ WORKDIR="${BACKUP_ROOT}/tmp_${TIMESTAMP}"
 ARCHIVE="${BACKUP_ROOT}/aistack_backup_${TIMESTAMP}.tar.gz"
 
 mkdir -p "${WORKDIR}"
-
-echo "[backup] Dumping PostgreSQL..."
-docker compose exec -T postgres pg_dumpall -U "${POSTGRES_USER:-aistack}" > "${WORKDIR}/postgres.sql" \
-  || echo "[backup] WARNING: postgres dump failed (is the container running?)"
 
 echo "[backup] Snapshotting Neo4j data directory..."
 mkdir -p "${WORKDIR}/neo4j"

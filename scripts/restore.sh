@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restores Postgres, Neo4j, ChromaDB, and Redis data from a backup archive
+# Restores Neo4j, ChromaDB, and Redis data from a backup archive
 # created by scripts/backup.sh. Meant to be invoked via `make restore FILE=...`.
 set -euo pipefail
 
@@ -14,18 +14,12 @@ fi
 mkdir -p "${WORKDIR}"
 tar -xzf "${ARCHIVE}" -C "${WORKDIR}"
 
-echo "[restore] This will overwrite current Postgres, Neo4j, ChromaDB, and Redis data."
+echo "[restore] This will overwrite current Neo4j, ChromaDB, and Redis data."
 read -r -p "Continue? [y/N] " confirm
 if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
   echo "[restore] Aborted."
   rm -rf "${WORKDIR}"
   exit 0
-fi
-
-if [ -f "${WORKDIR}/postgres.sql" ]; then
-  echo "[restore] Restoring PostgreSQL..."
-  docker compose exec -T postgres psql -U "${POSTGRES_USER:-aistack}" -d postgres < "${WORKDIR}/postgres.sql" \
-    || echo "[restore] WARNING: postgres restore failed"
 fi
 
 if [ -d "${WORKDIR}/neo4j/data" ]; then

@@ -1,40 +1,72 @@
-# Secrets
+# ── Environment & secrets ────────────────────────────────────────────────
 .env
+.env.example
+*.key
+*.pem
+*.cert
 
-# Data volumes (persisted host-mounted data, not source)
-data/postgres/*
-data/neo4j/*
-data/redis/*
-data/chroma/*
-data/firecrawl/*
+# ── Data volumes (persistent host-mounted data, never source) ────────────
 data/browser/*
-data/youtube/*
+data/caddy/*
+data/chroma/*
+data/duckdb/*
+data/firecrawl/*
+data/firecrawl-pg/*
+data/minio/*
+data/mysql/*
+data/neo4j/*
+data/postgres/*
+data/qdrant/*
+data/redis/*
 data/searxng/*
 data/uptime-kuma/*
+data/youtube/*
 !data/**/.gitkeep
 
-# Downloaded HF models
-models/*
+# ── Downloaded HF models ─────────────────────────────────────────────────
+models/
 !models/.gitkeep
 
-# Backups
-backups/*
+# ── Backups ──────────────────────────────────────────────────────────────
+backups/
 !backups/.gitkeep
 
-# Python
+# ── Python ───────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
 .venv/
 venv/
+.python-version
 
-# OS / editor
+# ── Jupyter ──────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# ── OS / editor ──────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
 *.swp
+*.swo
+*~
 .vscode/
 .idea/
+*.project
+*.pydevproject
 
-# Caddy
+# ── Archives ─────────────────────────────────────────────────────────────
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+
+# ── Logs ─────────────────────────────────────────────────────────────────
+*.log
 caddy/access.log
+
+# ── Docker (build context leftovers) ─────────────────────────────────────
+.docker/
