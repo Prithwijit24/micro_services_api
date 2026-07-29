@@ -43,7 +43,7 @@ class CrawlService:
     Fallback chain:
       1. Static fetch (Trafilatura / Scrapling Fetcher)
       2. Scrapling StealthyFetcher (stealthy browser, no Playwright fingerprints)
-      3. Playwright/Obscura browser (full rendering)
+      3. Playwright browser (full rendering)
     """
 
     async def crawl(self, req: CrawlRequest) -> CrawlResponse:
@@ -74,7 +74,7 @@ class CrawlService:
             # Layer 2: Scrapling StealthyFetcher (stealthy browser without Playwright fingerprints)
             result = await self._crawl_via_stealthy_fetcher(req, result)
 
-        # Layer 3: Full Playwright/Obscura browser
+        # Layer 3: Full Playwright browser
         if not result.markdown or len(result.markdown) < 50:
             logger.info("StealthyFetcher thin for %s (%d chars), trying Playwright browser",
                         req.url, len(result.markdown or ""))

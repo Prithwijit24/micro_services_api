@@ -38,19 +38,24 @@ ai-infra-stack/
 │   │   ├── vector.py        # ~25 lines
 │   │   ├── cache.py         # ~25 lines
 │   │   ├── crawl.py         # ~20 lines
-│   │   └── gateway.py       # ~35 lines
+│   │   ├── duckdb.py        # ~25 lines
+│   │   ├── storage.py       # ~30 lines
+│   │   └── pipeline.py      # ~40 lines
 │   └── services/
 │       ├── browser.py       # Playwright/Camoufox logic
 │       ├── embed.py         # Sentence-transformers
-│       ├── youtube.py       # yt-dlp
+│       ├── youtube.py       # yt-dlp + Whisper
 │       ├── search.py        # SearXNG HTTP client
 │       ├── reranker.py      # Cross-encoder
 │       ├── clip.py          # CLIP model
 │       ├── graph.py         # Neo4j client
 │       ├── vector.py        # ChromaDB client
 │       ├── cache.py         # Redis client
-│       ├── crawl.py         # Firecrawl HTTP client
-│       └── gateway.py       # Reverse proxy logic
+│       ├── crawl.py         # Scrapling + Trafilatura
+│       ├── duckdb.py        # DuckDB OLAP
+│       ├── storage.py       # MinIO S3 client
+│       ├── proxy.py         # Free proxy routing
+│       └── pipeline.py      # Search→Crawl→Rerank pipeline
 ├── Dockerfile               # ONE Dockerfile
 ├── pyproject.toml           # ONE dependency file (uv)
 ├── docker-compose.yml       # App + infrastructure only
@@ -63,11 +68,11 @@ ai-infra-stack/
 │   ├── browser/
 │   ├── youtube/
 │   ├── searxng/
-│   ├── firecrawl/
 │   ├── redis/
-│   ├── postgres/
 │   ├── chroma/
-│   └── neo4j/
+│   ├── neo4j/
+│   ├── duckdb/
+│   └── minio/
 └── tests/
     └── test_smoke.py
 ```
@@ -82,7 +87,7 @@ from app.routers import register_all_routers
 
 app = FastAPI(
     title="AI Infra Stack",
-    description="Unified API for search, browse, embed, and more",
+    description="Unified API for search, browse, embed, crawl, and more",
     version="2.0.0",
 )
 
@@ -101,10 +106,10 @@ from fastapi import FastAPI
 def register_all_routers(app: FastAPI):
     from app.routers import (
         search, browse, embed, youtube, clip,
-        reranker, graph, vector, cache, crawl, gateway,
+        reranker, graph, vector, cache, crawl, duckdb, storage, pipeline,
     )
     for module in [search, browse, embed, youtube, clip,
-                   reranker, graph, vector, cache, crawl, gateway]:
+                   reranker, graph, vector, cache, crawl, duckdb, storage, pipeline]:
         app.include_router(module.router)
 ```
 
@@ -133,18 +138,21 @@ async def endpoint(req: <Request>):
 Each service is a thin class wrapping the actual library call:
 
 - **search.py**: ~15 lines, wraps httpx call to SearXNG
-- **browse.py**: ~40 lines, wraps Playwright/Camoufox
+- **browse.py**: ~80 lines, multi-layer browser fallback (Firefox/Chromium/StealthyFetcher)
 - **embed.py**: ~20 lines, wraps sentence-transformers
-- **youtube.py**: ~80 lines, wraps yt-dlp (most complex)
+- **youtube.py**: ~150 lines, wraps yt-dlp + Whisper STT
 - **clip.py**: ~20 lines, wraps sentence-transformers
 - **reranker.py**: ~20 lines, wraps cross-encoder
 - **graph.py**: ~30 lines, wraps neo4j driver
 - **vector.py**: ~30 lines, wraps chromadb
 - **cache.py**: ~25 lines, wraps redis
-- **crawl.py**: ~15 lines, wraps httpx call to Firecrawl
-- **gateway.py**: ~40 lines, wraps httpx reverse proxy
+- **crawl.py**: ~50 lines, Scrapling + Trafilatura + Playwright fallback
+- **duckdb.py**: ~30 lines, wraps duckdb
+- **storage.py**: ~40 lines, wraps MinIO S3
+- **proxy.py**: ~50 lines, free proxy routing
+- **pipeline.py**: ~100 lines, Search→Crawl→Rerank pipeline
 
-**Total: ~335 lines across all services.**
+**Total: ~680 lines across all services.**
 
 ### 5. `app/deps.py` — Lazy-Loaded Shared Dependencies
 
@@ -402,7 +410,7 @@ smoke-test: ## Hit /health on app through gateway
 - `data/` directory structure
 - `backups/` directory
 - `models/` directory (HuggingFace cache)
-- Infrastructure services in docker-compose.yml (postgres, redis, neo4j, chromadb, searxng, firecrawl, uptime-kuma, dozzle)
+- Infrastructure services in docker-compose.yml (redis, neo4j, chromadb, searxng, dozzle)
 
 ## How to Add a New Service
 

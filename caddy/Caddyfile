@@ -25,18 +25,3 @@
         Referrer-Policy "strict-origin-when-cross-origin"
     }
 }
-
-# Optional: expose monitoring dashboards behind a subpath / basic auth.
-# Uncomment and set MONITOR_DOMAIN in .env to enable.
-#
-# {$MONITOR_DOMAIN} {
-#     basicauth /* {
-#         admin {$MONITOR_PASSWORD_HASH}
-#     }
-#     handle_path /uptime/* {
-#         reverse_proxy uptime-kuma:3001
-#     }
-#     handle_path /logs/* {
-#         reverse_proxy dozzle:8080
-#     }
-# }

@@ -23,11 +23,7 @@ os.environ.setdefault("NEO4J_PASSWORD", "changeme")
 os.environ.setdefault("CHROMA_HOST", "localhost")
 os.environ.setdefault("CHROMA_PORT", "8000")
 os.environ.setdefault("SEARXNG_URL", "http://localhost:8080")
-os.environ.setdefault("MYSQL_HOST", "localhost")
-os.environ.setdefault("MYSQL_PORT", "3306")
-os.environ.setdefault("MYSQL_USER", "aistack")
-os.environ.setdefault("MYSQL_PASSWORD", "changeme")
-os.environ.setdefault("MYSQL_DB", "aistack")
+
 os.environ["CRAWL_ENGINE"] = "trafilatura"
 
 results = []
@@ -391,33 +387,6 @@ def test_pipeline_stream():
     record("pipeline: streaming endpoint responds", True)
 
 
-# ── MySQL ────────────────────────────────────────────────────────────────────
-
-
-def test_mysql():
-    """Test MySQL connection and basic operations."""
-    try:
-        import mysql.connector
-        conn = mysql.connector.connect(
-            host=os.environ.get("MYSQL_HOST", "localhost"),
-            port=int(os.environ.get("MYSQL_PORT", "3306")),
-            user=os.environ.get("MYSQL_USER", "aistack"),
-            password=os.environ.get("MYSQL_PASSWORD", "changeme"),
-            database=os.environ.get("MYSQL_DB", "aistack"),
-        )
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        result = cursor.fetchone()
-        assert result[0] == 1
-        cursor.close()
-        conn.close()
-        record("mysql: connection + basic query", True)
-    except ImportError:
-        record("mysql: connection + basic query", True, "mysql-connector not installed, skip")
-    except Exception as e:
-        record("mysql: connection + basic query", False, str(e))
-
-
 # ── Run all ──────────────────────────────────────────────────────────────────
 
 
@@ -439,7 +408,6 @@ if __name__ == "__main__":
         test_pipeline_simple,
         test_pipeline_bot_protected,
         test_pipeline_stream,
-        test_mysql,
     ]
     failed = 0
     for t in tests:

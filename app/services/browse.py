@@ -1,9 +1,9 @@
-"""Browser automation — Obscura cloud, local Playwright (Firefox primary), or StealthyFetcher.
+"""Browser automation — local Playwright (Firefox primary) or StealthyFetcher.
 
-The original code used Camoufox (stealthy Firefox) which bypasses bot detection on
-sites like MakeMyTrip. Chromium is easily fingerprinted; Firefox has a different TLS
-fingerprint, JS engine, and DOM API surface that anti-bot systems treat differently.
+Firefox has a different TLS fingerprint, JS engine, and DOM API surface than Chromium,
+which is why Camoufox (stealthy Firefox) bypasses bot detection on sites like MakeMyTrip.
 
+Fallback chain: Local Firefox → Local Chromium → Scrapling StealthyFetcher.
 Proxy routing: All browser requests are routed through rotating free proxies
 to avoid IP-based detection on cloud VMs.
 """
@@ -19,26 +19,17 @@ from app.services.proxy import proxy_manager, ua_rotator
 
 logger = logging.getLogger("browse")
 
-OBSCURA_CDP_URL = os.getenv("OBSCURA_CDP_URL", "")
 USE_PROXIES = os.getenv("USE_PROXIES", "false").lower() == "true"
 
 
 class BrowserService:
     async def browse(self, req: BrowseRequest) -> BrowseResponse:
         """Browse a URL with multi-layer fallback:
-        1. Obscura cloud browser (if configured)
-        2. Local Firefox (primary — bypasses bot detection like Camoufox)
-        3. Local Chromium (fallback — different fingerprint)
-        4. Scrapling StealthyFetcher (final fallback)
+        1. Local Firefox (primary — bypasses bot detection like Camoufox)
+        2. Local Chromium (fallback — different fingerprint)
+        3. Scrapling StealthyFetcher (final fallback)
         """
-        # Layer 1: Obscura cloud browser
-        if OBSCURA_CDP_URL:
-            try:
-                return await self._browse_obscura(req)
-            except Exception as e:
-                logger.warning("Obscura browser failed for %s: %s", req.url, e)
-
-        # Layer 2: Local Firefox (primary — best anti-detection)
+        # Layer 1: Local Firefox (primary — best anti-detection)
         try:
             return await self._browse_local(req, browser_type="firefox")
         except Exception as e:
@@ -58,20 +49,6 @@ class BrowserService:
 
         return BrowseResponse(url=str(req.url), action=req.action, success=False,
                               message="All browser fallbacks failed")
-
-    async def _browse_obscura(self, req: BrowseRequest) -> BrowseResponse:
-        """Connect to Obscura cloud browser via CDP."""
-        from playwright.async_api import async_playwright
-
-        async with async_playwright() as p:
-            browser = await p.chromium.connect_over_cdp(OBSCURA_CDP_URL)
-            logger.info("Connected to Obscura cloud browser")
-            page = await browser.new_page()
-            try:
-                return await self._render_page(page, req)
-            finally:
-                await page.close()
-                await browser.close()
 
     async def _browse_local(self, req: BrowseRequest, browser_type: str = "firefox") -> BrowseResponse:
         """Launch a local browser (firefox or chromium) with multiple wait strategies.

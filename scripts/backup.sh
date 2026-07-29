@@ -21,7 +21,7 @@ cp -a ./data/chroma/. "${WORKDIR}/chroma/" 2>/dev/null \
   || echo "[backup] WARNING: chroma data copy failed"
 
 echo "[backup] Dumping Redis (RDB snapshot)..."
-docker compose exec -T redis redis-cli -a "${REDIS_PASSWORD:-changeme}" --no-auth-warning SAVE \
+docker compose exec -T redis redis-cli --no-auth-warning SAVE \
   || echo "[backup] WARNING: redis SAVE failed"
 mkdir -p "${WORKDIR}/redis"
 cp -a ./data/redis/dump.rdb "${WORKDIR}/redis/" 2>/dev/null \

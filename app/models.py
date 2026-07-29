@@ -279,39 +279,6 @@ class CacheDeleteResponse(BaseModel):
     deleted: bool
 
 
-# ── MySQL ──────────────────────────────────────────────────────────────────
-
-
-class MySqlQueryRequest(BaseModel):
-    sql: str = Field(..., min_length=1)
-    params: Optional[list[Any]] = Field(default=None)
-
-
-class MySqlQueryResponse(BaseModel):
-    columns: list[str]
-    rows: list[dict[str, Any]]
-    row_count: int
-
-
-class MySqlInsertRequest(BaseModel):
-    table: str = Field(..., min_length=1)
-    columns: list[str] = Field(..., min_length=1)
-    rows: list[dict[str, Any]] = Field(..., min_length=1)
-
-
-class MySqlInsertResponse(BaseModel):
-    table: str
-    inserted: int
-
-
-class MySqlTableRequest(BaseModel):
-    pass
-
-
-class MySqlTableResponse(BaseModel):
-    tables: list[dict[str, Any]]
-
-
 # ── Crawl (Scrapling + Trafilatura) ───────────────────────────────────────
 
 
@@ -328,64 +295,6 @@ class CrawlResponse(BaseModel):
     html: Optional[str] = None
     title: Optional[str] = None
     status_code: Optional[int] = None
-
-
-# ── Qdrant ─────────────────────────────────────────────────────────────────
-
-
-class QdrantRecord(BaseModel):
-    id: str
-    embedding: list[float]
-    document: Optional[str] = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class QdrantCreateCollectionRequest(BaseModel):
-    collection: str
-    dimensions: int = Field(default=384, ge=1)
-    distance: Literal["Cosine", "Euclid", "Dot", "Manhattan"] = "Cosine"
-
-
-class QdrantCreateCollectionResponse(BaseModel):
-    collection: str
-    created: bool
-    dimensions: int
-
-
-class QdrantCollectionsResponse(BaseModel):
-    collections: list[str]
-
-
-class QdrantUpsertRequest(BaseModel):
-    collection: str
-    records: list[QdrantRecord] = Field(..., min_length=1)
-
-
-class QdrantUpsertResponse(BaseModel):
-    collection: str
-    upserted: int
-
-
-class QdrantSearchRequest(BaseModel):
-    collection: str
-    query_embedding: list[float]
-    top_k: int = Field(default=5, ge=1, le=100)
-    where: Optional[dict[str, Any]] = None
-
-
-class QdrantSearchResponse(BaseModel):
-    collection: str
-    matches: list[SearchMatch]
-
-
-class QdrantDeleteRequest(BaseModel):
-    collection: str
-    ids: list[str] = Field(..., min_length=1)
-
-
-class QdrantDeleteResponse(BaseModel):
-    collection: str
-    deleted: int
 
 
 # ── DuckDB ─────────────────────────────────────────────────────────────────
