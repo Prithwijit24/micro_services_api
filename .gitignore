@@ -7,6 +7,9 @@
 
 # ── Data volumes (persistent host-mounted data, never source) ────────────
 data/browser/*
+data/beszel/*
+data/beszel-socket/*
+data/beszel-agent/*
 data/caddy/*
 data/chroma/*
 data/duckdb/*
