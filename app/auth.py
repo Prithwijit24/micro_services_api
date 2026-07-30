@@ -156,10 +156,12 @@ async def store_api_key(name: str, raw_key: str, rate_limit: Optional[int], expi
     info = {
         "name": name,
         "key_prefix": raw_key[:16] + "...",
-        "rate_limit": rate_limit,
         "created_at": now,
-        "expires_at": expires_at,
     }
+    if rate_limit is not None:
+        info["rate_limit"] = rate_limit
+    if expires_at is not None:
+        info["expires_at"] = expires_at
 
     pipe = client.pipeline()
     pipe.hset(f"apikey:{key_hash}", mapping={k: str(v) for k, v in info.items()})
@@ -179,6 +181,11 @@ async def validate_api_key(raw_key: str) -> Optional[dict]:
     info = await client.hgetall(f"apikey:{key_hash}")
     if not info:
         return None
+
+    # Sanitize "None" strings (legacy storage bug fix)
+    for k, v in info.items():
+        if v == "None":
+            info[k] = None
 
     # Check expiry
     expires_at = info.get("expires_at")
@@ -213,7 +220,11 @@ async def list_api_keys() -> list[dict]:
     for h in key_hashes:
         info = await client.hgetall(f"apikey:{h}")
         if info:
-            keys.append(info)
+            # Convert "None" strings back to actual None (legacy data fix)
+            cleaned = {}
+            for k, v in info.items():
+                cleaned[k] = None if v == "None" else v
+            keys.append(cleaned)
     return keys
 
 
