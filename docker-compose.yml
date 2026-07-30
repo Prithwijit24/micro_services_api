@@ -38,6 +38,8 @@ services:
           cpus: "1.5"
     expose:
       - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./models:/root/.cache/huggingface
       - ./data/browser:/data/browser
