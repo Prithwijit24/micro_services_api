@@ -2,19 +2,33 @@
 
 import os
 import asyncio
+import logging
 
 from app.deps import get_http_client
 from app.models import SearchRequest, SearchResponse, SearchResultItem
 
+logger = logging.getLogger("search")
 SEARXNG_URL = os.getenv("SEARXNG_URL", "http://searxng:8080")
 SEARCH_ENGINE = os.getenv("SEARCH_ENGINE", "searxng")
 
 
 class SearchService:
     async def search(self, req: SearchRequest) -> SearchResponse:
-        if SEARCH_ENGINE == "ddgs":
-            return await self._search_ddgs(req)
-        return await self._search_searxng(req)
+        """Try primary engine first, fall back to secondary on failure."""
+        primary, secondary = ("ddgs", "searxng") if SEARCH_ENGINE == "ddgs" else ("searxng", "ddgs")
+        errors = []
+
+        for engine in (primary, secondary):
+            try:
+                if engine == "ddgs":
+                    return await self._search_ddgs(req)
+                else:
+                    return await self._search_searxng(req)
+            except Exception as e:
+                logger.warning("Search engine %s failed: %s", engine, e)
+                errors.append(f"{engine}: {e}")
+
+        raise Exception(f"All search engines failed: {'; '.join(errors)}")
 
     async def _search_searxng(self, req: SearchRequest) -> SearchResponse:
         client = get_http_client()
@@ -27,6 +41,7 @@ class SearchService:
                 "language": req.language,
                 "safesearch": req.safesearch,
             },
+            headers={"X-Forwarded-For": "127.0.0.1"},
         )
         resp.raise_for_status()
         data = resp.json()

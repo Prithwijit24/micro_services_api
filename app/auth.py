@@ -32,23 +32,33 @@ logger = logging.getLogger("auth")
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET is not set. Generate one with: openssl rand -hex 32\n"
+        "Add it to your .env file: JWT_SECRET=<generated-value>"
+    )
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 
 # Admin credentials for bootstrapping (JWT generation)
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
+ADMIN_PASS = os.getenv("ADMIN_PASS", "")
+if not ADMIN_PASS:
+    raise RuntimeError(
+        "ADMIN_PASS is not set. Add it to your .env file: ADMIN_PASS=<strong-password>"
+    )
 
 # Rate limiting defaults (requests per minute)
 RATE_LIMIT_ANON = int(os.getenv("RATE_LIMIT_ANON", "20"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "300"))
 
 # Trusted proxy header (set if behind Caddy/nginx)
-TRUSTED_PROXY = os.getenv("TRUSTED_PROXY", "")
+TRUSTED_PROXY = os.getenv("TRUSTED_PROXY", "127.0.0.1")
 
 # Endpoints that bypass authentication (health, docs, OpenAPI, auth itself)
 PUBLIC_PATHS = {
+    "/",
     "/health",
     "/docs",
     "/openapi.json",

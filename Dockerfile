@@ -16,10 +16,14 @@ RUN uv pip install python-multipart
 
 # Install Playwright browsers: Firefox (primary — bypasses bot detection) + Chromium (fallback)
 RUN uv run playwright install firefox chromium --with-deps
+# Preserve browsers so entrypoint can copy them into tmpfs at startup (no re-download)
+RUN mkdir -p /opt/playwright-browsers && cp -r /root/.cache/ms-playwright/* /opt/playwright-browsers/
 
-# Copy application code
+# Copy application code and startup script
 COPY app/ ./app/
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/entrypoint.sh"]

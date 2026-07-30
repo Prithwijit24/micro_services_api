@@ -19,6 +19,8 @@ services:
     env_file: .env
     environment:
       HF_HOME: /root/.cache/huggingface
+      PLAYWRIGHT_CHROMIUM_ARGS: "--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage"
+      PATCHRIGHT_CHROMIUM_ARGS: "--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage"
     shm_size: "2gb"
     security_opt:
       - no-new-privileges:true
@@ -30,7 +32,9 @@ services:
     tmpfs:
       - /tmp:size=256M
       - /var/tmp:size=64M
-      - /root/.cache:size=512M
+      - /root/.cache/uv:size=128M
+      - /root/.cache/pip:size=64M
+      - /root/.cache/torch:size=256M
     deploy:
       resources:
         limits:
@@ -45,6 +49,7 @@ services:
       - ./data/browser:/data/browser
       - ./data/youtube:/opt/data/youtube
       - ./data/duckdb:/data/duckdb
+      - ./data/playwright:/root/.cache/ms-playwright
     healthcheck:
       <<: *healthcheck-defaults
       start_period: 30s

@@ -8,7 +8,12 @@ set -uo pipefail
 
 BASE="${APP_BASE:-http://localhost}"
 ADMIN_USER="${ADMIN_USER:-admin}"
-ADMIN_PASS="${ADMIN_PASS:-changeme}"
+ADMIN_PASS="${ADMIN_PASS:-}"
+if [ -z "$ADMIN_PASS" ]; then
+  echo "ERROR: ADMIN_PASS environment variable is required."
+  echo "  export ADMIN_PASS=<your-admin-password>"
+  exit 1
+fi
 PASS=0
 FAIL=0
 
@@ -55,7 +60,7 @@ token_response=$(curl -fsS -X POST "${BASE}/auth/token" \
 if [ -z "$token_response" ]; then
     fail "JWT token generation" "no response from /auth/token"
     echo ""
-    echo "⚠️  Make sure ADMIN_USER=admin and ADMIN_PASS=changeme are set in .env"
+    echo "⚠️  Make sure ADMIN_USER and ADMIN_PASS are set correctly in .env"
     exit 1
 fi
 

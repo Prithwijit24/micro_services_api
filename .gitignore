@@ -1,12 +1,11 @@
 # ── Environment & secrets ────────────────────────────────────────────────
 .env
-.env.example
 *.key
 *.pem
 *.cert
-
 # ── Data volumes (persistent host-mounted data, never source) ────────────
 data/browser/*
+data/playwright/*
 data/beszel/*
 data/beszel-socket/*
 data/beszel-agent/*

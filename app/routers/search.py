@@ -7,7 +7,7 @@ router = APIRouter(prefix="/search")
 svc = SearchService()
 
 
-@router.post("/", response_model=SearchResponse)
+@router.post("", response_model=SearchResponse)
 async def search(req: SearchRequest):
     try:
         return await svc.search(req)

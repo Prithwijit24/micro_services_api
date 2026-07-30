@@ -50,21 +50,25 @@ class CrawlService:
         loop = asyncio.get_running_loop()
         timeout_s = req.timeout_ms / 1000
 
-        # Layer 1: Static fetch
-        try:
-            if CRAWL_ENGINE == "scrapling":
+        # Layer 1: Static fetch — try primary first, fall back to secondary
+        fetchers = [self._crawl_scrapling, self._crawl_trafilatura] if CRAWL_ENGINE == "scrapling" else [self._crawl_trafilatura, self._crawl_scrapling]
+        result = CrawlResponse(url=str(req.url), markdown="", status_code=None, title=None)
+        best = result
+        for fetcher in fetchers:
+            try:
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(_executor, self._crawl_scrapling, req),
+                    loop.run_in_executor(_executor, fetcher, req),
                     timeout=timeout_s,
                 )
-            else:
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(_executor, self._crawl_trafilatura, req),
-                    timeout=timeout_s,
-                )
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.warning("static crawl timed out or failed for %s: %s", req.url, e)
-            result = CrawlResponse(url=str(req.url), markdown="", status_code=None, title=None)
+                if len(result.markdown or "") > len(best.markdown or ""):
+                    best = result
+                if result.markdown and len(result.markdown) >= 50:
+                    break
+                logger.info("Static fetch via %s thin for %s (%d chars), trying next",
+                            fetcher.__name__, req.url, len(result.markdown or ""))
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning("Static fetch %s failed for %s: %s", fetcher.__name__, req.url, e)
+        result = best
 
         # If content is short (bot challenge / JS-rendered), escalate
         if not result.markdown or len(result.markdown) < 50:
@@ -262,7 +266,7 @@ class CrawlService:
             config=config,
             include_comments=False,
             include_tables=True,
-            output_format="xml",
+            output_format="markdown",
             favor_recall=req.only_main_content,
         ) or ""
 

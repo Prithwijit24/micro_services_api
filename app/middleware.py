@@ -30,8 +30,9 @@ logger = logging.getLogger("middleware")
 
 # Configuration
 MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(10 * 1024 * 1024)))  # 10 MB default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")  # comma-separated or *
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")  # comma-separated; empty = no CORS (same-origin only)
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
+AUTH_STRICT = os.getenv("AUTH_STRICT", "true").lower() == "true"  # reject anonymous on protected endpoints
 
 
 # ── Request Size Limiter ──────────────────────────────────────────────────
@@ -61,6 +62,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["X-Request-ID"] = request.headers.get("x-request-id", "")
+        response.headers["Cache-Control"] = "no-store"
+        # Strip Server header to avoid leaking framework info
+        if "server" in response.headers:
+            del response.headers["server"]
         return response
 
 
@@ -123,12 +128,24 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
                     name = key_info.get("name", "unknown")
                     auth_identifier = f"apikey:{name}"
                     custom_limit = key_info.get("rate_limit")
-                    auth_limit = int(custom_limit) if custom_limit else RATE_LIMIT_AUTH
+                    if custom_limit and custom_limit != "None":
+                        try:
+                            auth_limit = int(custom_limit)
+                        except (ValueError, TypeError):
+                            auth_limit = RATE_LIMIT_AUTH
+                    else:
+                        auth_limit = RATE_LIMIT_AUTH
                 else:
                     return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
 
-        # Anonymous
+        # Anonymous — reject if strict mode, otherwise rate-limit at ANON level
         if not auth_identifier:
+            if AUTH_STRICT:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Authentication required. Use Bearer JWT or X-API-Key header."},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             auth_identifier = f"anon:{client_ip}"
             auth_limit = RATE_LIMIT_ANON
 
