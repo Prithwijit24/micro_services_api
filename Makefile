@@ -11,7 +11,7 @@ help: ## Show available targets
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 ## ─── Lifecycle ───────────────────────────────────────────────────────────────
-SERVICES := app caddy redis neo4j chromadb searxng minio dozzle
+SERVICES := app redis neo4j chromadb searxng minio dozzle beszel beszel-agent
 
 # Positional arg after `up` (e.g. `make up redis`)
 SERVICE := $(filter-out up,$(MAKECMDGOALS))
@@ -50,7 +50,7 @@ build: ## Rebuild the app image
 	$(COMPOSE) build app
 
 pull: ## Pull latest infra images
-	$(COMPOSE) pull redis neo4j chromadb searxng minio dozzle caddy
+	$(COMPOSE) pull redis neo4j chromadb searxng minio dozzle
 
 update: pull build ## Pull latest images and rebuild app
 	$(COMPOSE) up -d --remove-orphans

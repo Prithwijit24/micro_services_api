@@ -20,6 +20,16 @@ services:
     environment:
       HF_HOME: /root/.cache/huggingface
     shm_size: "2gb"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:size=256M
+      - /var/tmp:size=64M
     deploy:
       resources:
         limits:
@@ -45,7 +55,7 @@ services:
         condition: service_healthy
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # Redis (cache + message broker)
+  # Redis (cache + message broker) — internal only
   # ──────────────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.4-alpine
@@ -53,9 +63,11 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "6379:6379"
     command: ["redis-server", "--appendonly", "yes"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -67,7 +79,7 @@ services:
       test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # Neo4j (graph database) — kept as-is per user requirement
+  # Neo4j (graph database) — internal only
   # ──────────────────────────────────────────────────────────────────────────────
   neo4j:
     image: neo4j:5.26-community
@@ -75,9 +87,15 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "7687:7687"
-      - "7474:7474"
+    expose:
+      - "7687"
+      - "7474"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
       NEO4J_PLUGINS: '["apoc"]'
@@ -94,7 +112,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # ChromaDB (vector database)
+  # ChromaDB (vector database) — internal only
   # ──────────────────────────────────────────────────────────────────────────────
   chromadb:
     image: chromadb/chroma:0.5.23
@@ -102,8 +120,12 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -118,7 +140,7 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # SearXNG (meta search engine)
+  # SearXNG (meta search engine) — internal only
   # ──────────────────────────────────────────────────────────────────────────────
   searxng:
     image: searxng/searxng:latest
@@ -126,8 +148,12 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     deploy:
       resources:
         limits:
@@ -141,7 +167,8 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # MinIO (S3-compatible file storage — for local filesystem access)
+  # MinIO (S3-compatible file storage) — internal only
+  # Access via SSH tunnel: ssh -L 9001:localhost:9001 ubuntu@<VM_IP>
   # ──────────────────────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
@@ -150,9 +177,17 @@ services:
     networks:
       - internal
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+    expose:
+      - "9000"
+      - "9001"
     deploy:
       resources:
         limits:
@@ -167,30 +202,8 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
 
   # ──────────────────────────────────────────────────────────────────────────────
-  # Reverse proxy (Caddy)
-  # ──────────────────────────────────────────────────────────────────────────────
-  caddy:
-    image: caddy:2.9-alpine
-    container_name: ai-stack-caddy
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - internal
-    depends_on:
-      - app
-
-  # ──────────────────────────────────────────────────────────────────────────────
-  # Dozzle (lightweight log viewer)
+  # Dozzle (lightweight log viewer) — internal only
+  # Access via SSH tunnel: ssh -L 8081:localhost:8081 ubuntu@<VM_IP>
   # ──────────────────────────────────────────────────────────────────────────────
   dozzle:
     image: amir20/dozzle:latest
@@ -198,8 +211,12 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    ports:
-      - "127.0.0.1:8081:8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    expose:
+      - "8080"
     deploy:
       resources:
         limits:
@@ -207,10 +224,56 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Beszel (lightweight server monitoring — hub + agent)
+  # ──────────────────────────────────────────────────────────────────────────────
+  beszel:
+    image: henrygd/beszel:latest
+    container_name: ai-stack-beszel
+    restart: unless-stopped
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:8090:8090"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    volumes:
+      - ./data/beszel:/beszel_data
+      - ./data/beszel-socket:/beszel_socket
+    environment:
+      APP_URL: http://localhost:8090
+
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: ai-stack-beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    volumes:
+      - ./data/beszel-agent:/var/lib/beszel-agent
+      - ./data/beszel-socket:/beszel_socket
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: /beszel_socket/beszel.sock
+      HUB_URL: ${BESZEL_HUB_URL:-http://localhost:8090}
+      TOKEN: ${BESZEL_TOKEN:-}
+      KEY: ${BESZEL_KEY:-}
+
 networks:
   internal:
     driver: bridge
-
-volumes:
-  caddy_data:
-  caddy_config:

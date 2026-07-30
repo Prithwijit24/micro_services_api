@@ -1,6 +1,6 @@
 [project]
 name = "ai-infra-stack"
-version = "2.0.0"
+version = "2.1.0"
 description = "Unified AI infrastructure stack - single FastAPI app"
 requires-python = ">=3.12"
 dependencies = [
@@ -29,5 +29,7 @@ dependencies = [
     "faster-whisper>=1.0.0",
     # Free proxy rotation for anti-detection on cloud VMs
     "free-proxy>=1.2.0",
+    # JWT auth + security
+    "PyJWT>=2.9.0",
     "jupyterlab>=4.6.2",
 ]
