@@ -30,6 +30,7 @@ services:
     tmpfs:
       - /tmp:size=256M
       - /var/tmp:size=64M
+      - /root/.cache:size=512M
     deploy:
       resources:
         limits:
@@ -68,6 +69,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     deploy:
       resources:
         limits:
@@ -96,6 +100,8 @@ services:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
       NEO4J_PLUGINS: '["apoc"]'
@@ -126,6 +132,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     deploy:
       resources:
         limits:
@@ -154,6 +163,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     deploy:
       resources:
         limits:
@@ -215,6 +227,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
     expose:
       - "8080"
     deploy:
@@ -224,55 +239,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-  # ──────────────────────────────────────────────────────────────────────────────
-  # Beszel (lightweight server monitoring — hub + agent)
-  # ──────────────────────────────────────────────────────────────────────────────
-  beszel:
-    image: henrygd/beszel:latest
-    container_name: ai-stack-beszel
-    restart: unless-stopped
-    networks:
-      - internal
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    ports:
-      - "127.0.0.1:8090:8090"
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    volumes:
-      - ./data/beszel:/beszel_data
-      - ./data/beszel-socket:/beszel_socket
-    environment:
-      APP_URL: http://localhost:8090
-
-  beszel-agent:
-    image: henrygd/beszel-agent:latest
-    container_name: ai-stack-beszel-agent
-    restart: unless-stopped
-    network_mode: host
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_ADMIN
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-    volumes:
-      - ./data/beszel-agent:/var/lib/beszel-agent
-      - ./data/beszel-socket:/beszel_socket
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      LISTEN: /beszel_socket/beszel.sock
-      HUB_URL: ${BESZEL_HUB_URL:-http://localhost:8090}
-      TOKEN: ${BESZEL_TOKEN:-}
-      KEY: ${BESZEL_KEY:-}
 
 networks:
   internal:

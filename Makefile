@@ -11,7 +11,7 @@ help: ## Show available targets
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 ## ─── Lifecycle ───────────────────────────────────────────────────────────────
-SERVICES := app redis neo4j chromadb searxng minio dozzle beszel beszel-agent
+SERVICES := app redis neo4j chromadb searxng minio dozzle
 
 # Positional arg after `up` (e.g. `make up redis`)
 SERVICE := $(filter-out up,$(MAKECMDGOALS))
