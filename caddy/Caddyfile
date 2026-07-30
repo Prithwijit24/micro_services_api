@@ -5,7 +5,7 @@
 
 # Set DOMAIN in .env to your real domain to get automatic HTTPS.
 # For local/IP-only access, Caddy falls back to serving plain HTTP on :80.
-:{$HTTP_PORT:80} {
+aistackapi.duckdns.org {
     encode gzip zstd
 
     # Responds to ANY host (IP or domain) — reverse proxies to the app.
