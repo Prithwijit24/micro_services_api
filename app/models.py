@@ -318,7 +318,7 @@ class CrawlRequest(BaseModel):
     url: HttpUrl
     only_main_content: bool = Field(default=True)
     include_html: bool = Field(default=False)
-    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    timeout_ms: int = Field(default=30000, ge=1000, le=1000000)
 
 
 class CrawlResponse(BaseModel):

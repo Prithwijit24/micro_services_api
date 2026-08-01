@@ -37,7 +37,7 @@ logger = logging.getLogger("pipeline")
 _CRAWL_SEMAPHORE_LIMIT = 5
 
 # YouTube transcript timeout (seconds) — bounds caller wait, not thread cancellation
-PIPELINE_YT_TIMEOUT = int(os.getenv("PIPELINE_YT_TIMEOUT", "120"))
+PIPELINE_YT_TIMEOUT = int(os.getenv("PIPELINE_YT_TIMEOUT", "1000"))
 
 # YouTube URL patterns
 _YT_PATTERN = re.compile(

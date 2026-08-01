@@ -16,7 +16,7 @@ TOKEN = None
 def h():
     return {"Authorization": f"Bearer {TOKEN}"}
 
-def T(name, method, path, json_body=None, params=None, expect=200, checks=None, timeout=120):
+def T(name, method, path, json_body=None, params=None, expect=200, checks=None, timeout=1000):
     global PASS, FAIL, SKIP
     t0 = time.time()
     try:

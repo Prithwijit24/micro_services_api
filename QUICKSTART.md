@@ -18,6 +18,75 @@ BASE="${API_BASE:-https://aistackapi.duckdns.org}"
 
 ---
 
+## 🧠 Models at a Glance
+
+Four models live behind the API. They're loaded lazily on first request and cached in `./models/`, so the first call to a new model pays a one-time download cost (a few seconds to a few minutes depending on size). After that, every request is instant.
+
+#### Text embeddings — [`BAAI/bge-small-en-v1.5`](https://huggingface.co/BAAI/bge-small-en-v1.5) · ~130 MB · 384-d
+Maps text to a 384-d dense vector. Cosine similarity ≈ semantic similarity.
+
+```bash
+curl -X POST $BASE/embed \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"texts":["python is a programming language","cookies are baked goods"]}'
+```
+
+> Returns `{ "model": "BAAI/bge-small-en-v1.5", "dimensions": 384, "embeddings": [[…], […]] }`. Walked through end-to-end in [Step 6](#-step-6-turn-text-into-vectors).
+
+#### Vision + language — [`openai/clip-vit-base-patch32`](https://huggingface.co/openai/clip-vit-base-patch32) · ~600 MB · 512-d
+Three endpoints share the same 512-d text/image embedding space so text and images can be compared directly.
+
+```bash
+# Text → vector
+curl -X POST $BASE/clip/text_embedding \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"texts":["a cat on a couch","a dog in a field"]}'
+
+# Image → vector (URLs OR base64 strings)
+curl -X POST $BASE/clip/image_embedding \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"image_urls":["https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg"]}'
+
+# Text-vs-images similarity in one shot
+curl -X POST $BASE/clip/similarity \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"text":"a sunset over the ocean","image_urls":["https://…","https://…"]}'
+```
+
+> Returns `{ "text": "…", "scores": [0.31, 0.27] }` for similarity (parallel to your `image_urls`).
+
+#### Relevance scoring — [`BAAI/bge-reranker-v2-m3`](https://huggingface.co/BAAI/bge-reranker-v2-m3) · ~1.1 GB
+Cross-encoder that scores how relevant a document is to a query (semantic match, not keyword overlap).
+
+```bash
+curl -X POST $BASE/rerank \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"query":"python programming","documents":["Python is a programming language","Cookies are baked goods","Django is a Python framework"]}'
+```
+
+> Returns `{ "model": "BAAI/bge-reranker-v2-m3", "query": "…", "results": [{ "index": 0, "document": "…", "score": 0.94 }, …] }`. Walked through in [Step 7](#-step-7-rerank-search-results).
+
+#### Speech-to-text — [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper) · `base` · ~150 MB
+Auto-falls-back from YouTube subtitles → Whisper when subtitles are missing or forced via `force_whisper:true`.
+
+```bash
+# JSON segments (default)
+curl -X POST $BASE/youtube/transcript \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+
+# Pretty markdown for LLM ingestion
+curl -X POST "$BASE/youtube/transcript?output_format=markdown" \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+```
+
+> Returns `{ "id": "…", "language": "en", "segments": [{ "start": 0, "text": "…" }, …], "source": "youtube_subtitles" | "whisper", "whisper_model": "…" }`. Walked through in [Step 11](#-step-11-extract-youtube-insights).
+
+> ⚡ All four models share the same `./models/` cache on disk — once one is loaded, subsequent cold starts of any other model only download what hasn't already been fetched.
+
+---
+
 ## 🩺 Step 1: Is This Thing Alive?
 
 Before we do anything fancy, let's make sure the server is awake. Think of this as knocking on the door before entering.
@@ -90,7 +159,38 @@ curl -X POST $BASE/search \
 
 ---
 
-## 🕸️ Step 3: Crawl a Web Page
+## 📰 Bonus: Search News, Images & Videos
+
+*Three specialized search endpoints share the same auth & response shape but target a different medium — drop in beside Step 2 whenever you need them.*
+
+```bash
+# News search — reads via DDGS, optionally crawls each article
+curl -X POST $BASE/news \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"query":"ai regulation","max_results":3,"timelimit":"w"}'
+```
+
+> Pass `"crawl_content": true` to embed full article markdown alongside the snippet.
+
+```bash
+# Image search — DDGS → Unsplash → Pexels, with optional CLIP rerank
+curl -X POST $BASE/images \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"query":"aurora borealis","max_results":4,"use_clip":true}'
+```
+
+> Each result gets a `clip_score` (0–1) measuring how visually relevant it is to your text query. Handy for removing near-duplicates from a result set.
+
+```bash
+# Video search
+curl -X POST $BASE/videos \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"query":"rust async tutorial","max_results":3,"duration":"short"}'
+```
+
+---
+
+## 🕸️ Step 4: Crawl a Web Page
 
 *Search is great, but what if you want the actual content of a page? That's where crawl comes in. Give it a URL, and it returns clean markdown you can feed into an AI model.*
 
@@ -118,7 +218,7 @@ curl -X POST $BASE/crawl \
 
 ---
 
-## 🌐 Step 4: Browse a Live Page
+## 🌐 Step 5: Browse a Live Page
 
 *Crawling is great for static content. But what if you need to see what a page actually looks like in a browser? The browse endpoint fetches the full rendered HTML.*
 
@@ -144,7 +244,7 @@ curl -X POST $BASE/browse \
 
 ---
 
-## 🧠 Step 5: Turn Text Into Vectors
+## 🧠 Step 6: Turn Text Into Vectors
 
 *AI models don't understand words — they understand numbers. The embed endpoint converts your text into dense vectors (lists of floats) that capture semantic meaning. "Hello" and "Hi" get similar vectors; "Hello" and "Car" get very different ones.*
 
@@ -172,7 +272,45 @@ curl -X POST $BASE/embed \
 
 ---
 
-## 🎯 Step 6: Rerank Search Results
+## 🖼️ Bonus: Compare Text and Images With CLIP
+
+*CLIP embeds text and images into the same vector space — so you can score "how well does this image match this caption?" The stack exposes three CLIP endpoints.*
+
+```bash
+# Text → CLIP vector (512-d)
+curl -X POST $BASE/clip/text_embedding \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"texts":["a cat sitting on a couch","a dog in a field"]}'
+```
+
+```bash
+# Image → CLIP vector — supply URLs OR base64 strings
+curl -X POST $BASE/clip/image_embedding \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"image_urls":["https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg"]}'
+```
+
+```bash
+# Text vs images similarity in one shot
+curl -X POST $BASE/clip/similarity \
+  -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" \
+  -d '{"text":"a sunset over the ocean","image_urls":["https://...","https://..."]}'
+```
+
+**What comes back:**
+
+```json
+{
+  "text": "a sunset over the ocean",
+  "scores": [0.31, 0.27]
+}
+```
+
+> 🎯 `scores` is a list parallel to your `image_urls` — higher = more semantically aligned. Use this to deduplicate image search results or to power "search by caption" experiences.
+
+---
+
+## 🎯 Step 7: Rerank Search Results
 
 *You've got a pile of documents, but which ones actually matter? The reranker scores each document by how relevant it is to your query. Think of it as a smarter Ctrl+F.*
 
@@ -201,7 +339,7 @@ curl -X POST $BASE/rerank \
 
 ---
 
-## 🗄️ Step 7: Cache Things in Redis
+## 🗄️ Step 8: Cache Things in Redis
 
 *Sometimes you compute something expensive and want to save it for later. Redis is your high-speed storage locker — store anything, get it back in milliseconds.*
 
@@ -229,7 +367,7 @@ curl -X DELETE $BASE/cache/delete/greeting -H "X-API-Key: $API_KEY"
 
 ---
 
-## 🕸️ Step 8: Build a Knowledge Graph
+## 🕸️ Step 9: Build a Knowledge Graph
 
 *Relationships matter. "Alice knows Bob." "Paris is in France." Neo4j lets you store these connections and query them with Cypher, a graph query language.*
 
@@ -262,7 +400,7 @@ curl -X POST $BASE/graph/query \
 
 ---
 
-## 📊 Step 9: Run SQL with DuckDB
+## 📊 Step 10: Run SQL with DuckDB
 
 *Need to crunch numbers? DuckDB is an embedded analytical database — think SQLite, but built for OLAP. Run SQL queries directly via the API.*
 
@@ -270,7 +408,7 @@ curl -X POST $BASE/graph/query \
 curl -X POST $BASE/duckdb/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d '{"sql":"SELECT 42 AS answer, 'hello' AS greeting, 3.14 AS pi"}'
+  -d '{"sql":"SELECT 42 AS answer, CAST('"'"'hello'"'"' AS VARCHAR) AS greeting, 3.14 AS pi"}'
 ```
 
 **What comes back:**
@@ -288,9 +426,11 @@ curl -X POST $BASE/duckdb/query \
 
 > 📈 DuckDB handles millions of rows in memory. Great for analytics, aggregations, and temporary data processing.
 
+> 💡 You can also insert rows into a table with `POST /duckdb/insert` or list what's available via `GET /duckdb/tables`.
+
 ---
 
-## 🎬 Step 10: Extract YouTube Insights
+## 🎬 Step 11: Extract YouTube Insights
 
 *Videos are the internet's largest knowledge source — but they're opaque to AI. Our YouTube endpoint extracts metadata, transcripts, and even downloads audio for Whisper transcription.*
 
@@ -350,7 +490,7 @@ curl -X POST "$BASE/youtube/transcript?output_format=markdown" \
 
 ---
 
-## 📦 Step 11: Store Files with MinIO
+## 📦 Step 12: Store Files with MinIO
 
 *S3-compatible storage right in your stack. Upload files, list them, download them — just like AWS S3, but self-hosted.*
 
@@ -375,7 +515,7 @@ curl $BASE/storage/download/ai-stack/notes/todo.txt \
 
 ---
 
-## ⚡ Step 12: The Full Pipeline (Search → Crawl → Rerank)
+## ⚡ Step 13: The Full Pipeline (Search → Crawl → Rerank)
 
 *This is where the magic happens. One API call does it all: search the web, crawl the top results, extract clean markdown, and rerank everything by relevance. What would take 50 lines of code is now a single curl.*
 
@@ -434,7 +574,7 @@ curl -X POST $BASE/pipeline \
 
 ---
 
-## 🧪 Step 13: Run the Full Test Suite
+## 🧪 Step 14: Run the Full Test Suite
 
 Want to verify everything is working? Run the comprehensive test suite — 40+ tests covering all endpoints and edge cases:
 

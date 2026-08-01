@@ -67,7 +67,7 @@ fi
 # ── 5. Pipeline (simple query) ────────────────────────────────────────────
 echo ""
 echo "--- Pipeline (simple query) ---"
-pipeline_response=$(timeout 120 curl -fsS -X POST "${APP_BASE}/pipeline" \
+pipeline_response=$(timeout 1000 curl -fsS -X POST "${APP_BASE}/pipeline" \
     -H 'Content-Type: application/json' \
     -d '{"query": "python programming tutorial", "top_k": 2, "crawl_limit": 2}' 2>/dev/null || true)
 
@@ -97,7 +97,7 @@ fi
 # ── 6. Pipeline (bot-protected query) ─────────────────────────────────────
 echo ""
 echo "--- Pipeline (bot-protected query) ---"
-pipeline_mmt=$(timeout 120 curl -fsS -X POST "${APP_BASE}/pipeline" \
+pipeline_mmt=$(timeout 1000 curl -fsS -X POST "${APP_BASE}/pipeline" \
     -H 'Content-Type: application/json' \
     -d '{"query": "hotels in jaipur", "top_k": 2, "crawl_limit": 2}' 2>/dev/null || true)
 

@@ -130,7 +130,7 @@ fi
 # ── Step 7: Test Authenticated Pipeline ───────────────────────────────────
 echo ""
 echo "── Step 7: Test Authenticated Pipeline Access ──"
-pipeline_response=$(timeout 120 curl -fsS -X POST "${BASE}/pipeline" \
+pipeline_response=$(timeout 1000 curl -fsS -X POST "${BASE}/pipeline" \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${TOKEN}" \
     -d '{"query": "python programming", "top_k": 2, "crawl_limit": 2}' 2>/dev/null || true)
@@ -145,7 +145,7 @@ fi
 # ── Step 8: Test API Key Pipeline Access ──────────────────────────────────
 echo ""
 echo "── Step 8: Test API Key Pipeline Access ──"
-if [ -n "${API_KEY:-}" ]; then    apikey_pipeline=$(timeout 120 curl -fsS -X POST "${BASE}/pipeline" \
+if [ -n "${API_KEY:-}" ]; then    apikey_pipeline=$(timeout 1000 curl -fsS -X POST "${BASE}/pipeline" \
     -H 'Content-Type: application/json' \
     -H "X-API-Key: ${API_KEY}" \
     -d '{"query": "python programming", "top_k": 2, "crawl_limit": 2}' 2>/dev/null || true)

@@ -91,6 +91,20 @@ check "Search single result"   200 POST "$BASE/search" \
 check "Search edge: empty query" 422 POST "$BASE/search" \
   '{"query":"","max_results":1}'
 
+# ── News / Images / Videos ────────────────────────────────────────
+echo ""
+echo "── News / Images / Videos ──"
+# /news (DDGS), /images (DDGS→Unsplash→Pexels, CLIP optional), /videos (DDGS).
+# These hit external providers — results depend on network and may vary.
+check "News basic"             200 POST "$BASE/news" \
+  '{"query":"technology","max_results":2}'
+check "News edge: empty query" 422 POST "$BASE/news" \
+  '{"query":"","max_results":1}'
+check "Images basic (no CLIP)" 200 POST "$BASE/images" \
+  '{"query":"cat","max_results":2,"use_clip":false}'
+check "Videos basic"           200 POST "$BASE/videos" \
+  '{"query":"python","max_results":2}'
+
 # ── Crawl ─────────────────────────────────────────────────────────
 echo ""
 echo "── Crawl ──"
@@ -116,6 +130,17 @@ check "Embed multiple texts"     200 POST "$BASE/embed" \
   '{"texts":["hello","world","python"]}'
 check "Embed edge: empty list"   422 POST "$BASE/embed" \
   '{"texts":[]}'
+
+# ── CLIP ───────────────────────────────────────────────────────────
+echo ""
+echo "── CLIP ──"
+# Text-only endpoint — fast and deterministic, no external image fetch.
+# image_embedding / similarity are intentionally skipped: they require
+# downloading remote images and can be flaky in CI network conditions.
+# First request to this endpoint pays the ~600MB CLIP model cold start,
+# which can take ~10s on a fresh container but still returns 200.
+check "CLIP text_embedding"      200 POST "$BASE/clip/text_embedding" \
+  '{"texts":["a cat on a couch","a dog in a field"]}'
 
 # ── Cache (Redis) ──────────────────────────────────────────────────
 echo ""

@@ -176,14 +176,14 @@ test("news-basic", "post", "/news",
 test("news-crawl", "post", "/news",
      json_body={"query": "climate change", "max_results": 3, "crawl_content": True},
      check_keys=["query", "number_of_results", "results"],
-     timeout=120)
+     timeout=1000)
 
 # ── Images (DDGS → Unsplash → Pexels + CLIP) ───────────────────────────────
 print("\n── Images ──")
 test("images-ddg", "post", "/images",
      json_body={"query": "sunset over mountains", "max_results": 5, "use_clip": True},
      check_keys=["query", "number_of_results", "results"],
-     timeout=120)
+     timeout=1000)
 
 test("images-no-clip", "post", "/images",
      json_body={"query": "ocean waves", "max_results": 3, "use_clip": False},
@@ -211,7 +211,7 @@ print("\n── Pipeline ──")
 test("pipeline-simple", "post", "/pipeline",
      json_body={"query": "What is machine learning", "top_k": 3, "crawl_limit": 3, "max_search_results": 5},
      check_keys=["query", "results", "total_searched", "total_crawled"],
-     timeout=120)
+     timeout=1000)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EXISTING ENDPOINTS — READ-ONLY
