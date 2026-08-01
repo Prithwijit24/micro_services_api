@@ -96,8 +96,8 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
             if not allowed:
                 return JSONResponse(
                     status_code=429,
-                    content={"detail": "Rate limit exceeded", "retry_after": 60},
-                    headers={"Retry-After": "60", "X-RateLimit-Limit": str(RATE_LIMIT_ANON), "X-RateLimit-Remaining": "0"},
+                    content={"detail": "Rate limit exceeded", "retry_after": 1},
+                    headers={"Retry-After": "1", "X-RateLimit-Limit": str(RATE_LIMIT_ANON), "X-RateLimit-Remaining": "0"},
                 )
             response = await call_next(request)
             response.headers["X-RateLimit-Limit"] = str(RATE_LIMIT_ANON)
@@ -158,9 +158,9 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
         if not allowed:
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded", "retry_after": 60},
+                content={"detail": "Rate limit exceeded", "retry_after": 1},
                 headers={
-                    "Retry-After": "60",
+                    "Retry-After": "1",
                     "X-RateLimit-Limit": str(auth_limit),
                     "X-RateLimit-Remaining": "0",
                 },

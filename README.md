@@ -261,7 +261,7 @@ Returns `{ "id": "…", "language": "en", "segments": [{ "start": 0, "text": "�
 |-------|-----------|
 | **TLS** | Caddy auto-HTTPS with Let's Encrypt |
 | **Auth** | JWT + API keys (required for all protected endpoints) |
-| **Rate limit** | Anonymous: 20 req/min · Authenticated: 300 req/min |
+| **Rate limit** | Anonymous: 20 req/sec · Authenticated: 300 req/sec |
 | **Strict mode** | `AUTH_STRICT=true` — anonymous requests get 401 |
 | **Headers** | HSTS, nosniff, XSS protection, CSP, Server stripped |
 | **Docker** | `read_only: true`, `no-new-privileges`, `cap_drop: ALL` |

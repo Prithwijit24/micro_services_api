@@ -49,7 +49,7 @@ if not ADMIN_PASS:
         "ADMIN_PASS is not set. Add it to your .env file: ADMIN_PASS=<strong-password>"
     )
 
-# Rate limiting defaults (requests per minute)
+# Rate limiting defaults (requests per second)
 RATE_LIMIT_ANON = int(os.getenv("RATE_LIMIT_ANON", "20"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "300"))
 
@@ -82,7 +82,7 @@ class TokenResponse(BaseModel):
 
 class ApiKeyCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Human-readable label")
-    rate_limit: Optional[int] = Field(default=None, description="Custom rate limit (req/min). Null = default.")
+    rate_limit: Optional[int] = Field(default=None, description="Custom rate limit (req/sec). Null = default.")
     expires_days: Optional[int] = Field(default=None, description="Days until expiry. Null = never.")
 
 
@@ -233,11 +233,12 @@ async def list_api_keys() -> list[dict]:
 async def check_rate_limit(identifier: str, limit: int) -> tuple[bool, int, int]:
     """Check rate limit using sliding window counter in Redis.
 
+    Window is 1 second (rate limits are expressed in requests-per-second).
     Returns: (allowed, remaining, resets_at_unix)
     """
     client = get_redis()
     now = time.time()
-    window = 60  # 1-minute window
+    window = 1  # 1-second sliding window (req/sec semantics)
     window_start = now - window
 
     key = f"ratelimit:{identifier}"
