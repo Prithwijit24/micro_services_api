@@ -24,7 +24,6 @@ os.environ.setdefault("CHROMA_HOST", "localhost")
 os.environ.setdefault("CHROMA_PORT", "8000")
 os.environ.setdefault("SEARXNG_URL", "http://localhost:8080")
 
-os.environ["CRAWL_ENGINE"] = "trafilatura"
 
 results = []
 

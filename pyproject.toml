@@ -12,14 +12,11 @@ dependencies = [
     "sentence-transformers>=3.0",
     "yt-dlp>=2024.0",
     "neo4j>=5.0",
-    "chromadb>=0.5.0,<1.0.0",  # pin to 0.x to match server image 0.5.23
+    "chromadb==0.5.23",  # must match the Compose server image
     "playwright>=1.45",
     "ddgs>=9.0",
     "Pillow>=10.0",
-    # Crawl replacements (replaces Firecrawl)
-    "scrapling[fetchers]>=0.3",
     "trafilatura>=1.12",
-    "html2text>=2024.2.26",
     # DuckDB (embedded OLAP)
     "duckdb>=1.0.0",
     # MinIO (S3-compatible file storage)
@@ -27,9 +24,6 @@ dependencies = [
     "python-multipart>=0.0.9",
     # Whisper (speech-to-text fallback for YouTube transcripts)
     "faster-whisper>=1.0.0",
-    # Free proxy rotation for anti-detection on cloud VMs
-    "free-proxy>=1.2.0",
     # JWT auth + security
     "PyJWT>=2.9.0",
-    "jupyterlab>=4.6.2",
 ]

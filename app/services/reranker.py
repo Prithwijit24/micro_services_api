@@ -1,14 +1,13 @@
 """Reranker service via sentence-transformers CrossEncoder."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-
+from app.services.executors import ManagedExecutor
 from app.deps import get_reranker_model
 from app.models import RerankRequest, RerankResponse, RerankedDocument
 
 import os
 
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor = ManagedExecutor(2, "reranker")
 
 
 class RerankerService:
@@ -29,7 +28,11 @@ class RerankerService:
         model_name = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
         loop = asyncio.get_event_loop()
         ranked = await loop.run_in_executor(
-            _executor, self._rerank, req.query, req.documents, req.top_k
+            _executor.get(), self._rerank, req.query, req.documents, req.top_k
         )
         results = [RerankedDocument(index=i, document=d, score=s) for i, d, s in ranked]
         return RerankResponse(model=model_name, query=req.query, results=results)
+
+
+def close() -> None:
+    _executor.close()

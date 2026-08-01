@@ -30,11 +30,14 @@ class VectorService:
             self._client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
         return self._client
 
-    def _get_collection(self, name: str):
-        return self._get_client().get_or_create_collection(name=name)
+    def _get_collection(self, name: str, allow_create: bool = False):
+        client = self._get_client()
+        if allow_create:
+            return client.get_or_create_collection(name=name)
+        return client.get_collection(name=name)
 
     async def upsert(self, req: UpsertRequest) -> UpsertResponse:
-        collection = self._get_collection(req.collection)
+        collection = self._get_collection(req.collection, allow_create=True)
         collection.upsert(
             ids=[r.id for r in req.records],
             embeddings=[r.embedding for r in req.records],
@@ -44,7 +47,7 @@ class VectorService:
         return UpsertResponse(collection=req.collection, upserted=len(req.records))
 
     async def search(self, req: VectorSearchRequest) -> VectorSearchResponse:
-        collection = self._get_collection(req.collection)
+        collection = self._get_collection(req.collection, allow_create=False)
         result = collection.query(
             query_embeddings=[req.query_embedding],
             n_results=req.top_k,
@@ -67,6 +70,6 @@ class VectorService:
         return VectorSearchResponse(collection=req.collection, matches=matches)
 
     async def delete(self, req: VectorDeleteRequest) -> VectorDeleteResponse:
-        collection = self._get_collection(req.collection)
+        collection = self._get_collection(req.collection, allow_create=True)
         collection.delete(ids=req.ids)
         return VectorDeleteResponse(collection=req.collection, deleted=len(req.ids))

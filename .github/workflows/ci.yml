@@ -18,11 +18,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify Chroma client/server alignment
+        run: |
+          client=$(grep -oP 'chromadb==\K[0-9.]+' pyproject.toml)
+          server=$(grep -oP 'chromadb/chroma:\K[0-9.]+' docker-compose.yml)
+          test -n "$client" && test -n "$server"
+          if [ "$client" != "$server" ]; then
+            echo "Chroma mismatch: client=$client server=$server"
+            exit 1
+          fi
+
       - name: Run comprehensive API tests
         env:
           API_KEY: ${{ secrets.API_KEY }}
           ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
         run: bash tests/comprehensive.sh
+
+      - name: Run read-only database checks
+        env:
+          ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
+          API_BASE: ${{ secrets.API_BASE || 'https://aistackapi.duckdns.org' }}
+        run: python3 tests/db_read_test.py
 
       - name: Notify on failure
         if: failure()

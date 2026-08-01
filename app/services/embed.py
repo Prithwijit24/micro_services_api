@@ -1,12 +1,11 @@
 """Text embedding service via sentence-transformers."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-
+from app.services.executors import ManagedExecutor
 from app.deps import get_embed_model
 from app.models import EmbedRequest, EmbedResponse
 
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor = ManagedExecutor(2, "embed")
 
 class EmbedService:
     def _encode(self, texts: list[str], normalize: bool):
@@ -19,5 +18,9 @@ class EmbedService:
 
         model_name = os.getenv("EMBED_MODEL", "BAAI/bge-small-en-v1.5")
         loop = asyncio.get_event_loop()
-        vectors, dims = await loop.run_in_executor(_executor, self._encode, req.texts, req.normalize)
+        vectors, dims = await loop.run_in_executor(_executor.get(), self._encode, req.texts, req.normalize)
         return EmbedResponse(model=model_name, dimensions=dims, embeddings=vectors)
+
+
+def close() -> None:
+    _executor.close()

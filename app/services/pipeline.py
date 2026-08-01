@@ -12,7 +12,7 @@ import time
 import logging
 from datetime import timedelta
 from dataclasses import dataclass
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from app.models import (
     PipelineRequest,
@@ -101,7 +101,7 @@ class PipelineService:
             # Use shared _executor from youtube.py for consistency
             data = await asyncio.wait_for(
                 loop.run_in_executor(
-                    _yt_executor, self.youtube._extract_transcript, item.url, language, False
+                    _yt_executor.get(), self.youtube._extract_transcript, item.url, language, False
                 ),
                 timeout=PIPELINE_YT_TIMEOUT,
             )
@@ -145,10 +145,54 @@ class PipelineService:
                 video_id=video_id,
             )
 
+    async def _process_item(self, item, semaphore: asyncio.Semaphore, timeout_ms: int):
+        """Process one search result for both normal and streaming pipelines."""
+        async with semaphore:
+            if _is_youtube_url(item.url):
+                try:
+                    return await self._fetch_youtube_transcript(item), None, "youtube"
+                except Exception as exc:
+                    logger.warning("YouTube transcript failed for %s [%s]: %s", item.url, type(exc).__name__, exc)
+                    return None, f"YouTube transcript failed for {item.url}: {exc}", "youtube"
+
+            try:
+                result = await self.crawl.crawl(
+                    CrawlRequest(
+                        url=item.url,
+                        only_main_content=True,
+                        include_html=False,
+                        timeout_ms=timeout_ms,
+                    )
+                )
+                markdown = result.markdown.strip()
+                if markdown:
+                    return CrawledItem(
+                        url=result.url,
+                        title=result.title or item.title or "",
+                        markdown=markdown,
+                        search_snippet=item.content or "",
+                    ), None, "crawl"
+                if item.content:
+                    return CrawledItem(
+                        url=result.url,
+                        title=result.title or item.title or "",
+                        markdown=item.content,
+                        search_snippet=item.content or "",
+                    ), None, "crawl"
+                return None, f"Empty crawl result for {result.url}", "crawl"
+            except Exception as exc:
+                logger.warning("Crawl failed for %s [%s]: %s", item.url, type(exc).__name__, exc)
+                if item.content:
+                    return CrawledItem(
+                        url=item.url,
+                        title=item.title or "",
+                        markdown=item.content,
+                        search_snippet=item.content or "",
+                    ), None, "crawl"
+                return None, f"Crawl failed for {item.url}: {exc}", "crawl"
+
     async def run(self, req: PipelineRequest) -> PipelineResponse:
         timings: dict[str, float] = {}
-        errors: list[str] = []
-
         # ── Step 1: Search ────────────────────────────────────────────────
         t0 = time.time()
         search_resp = await self.search.search(
@@ -174,51 +218,10 @@ class PipelineService:
         t1 = time.time()
         semaphore = asyncio.Semaphore(_CRAWL_SEMAPHORE_LIMIT)
 
-        async def _process_one(item):
-            async with semaphore:
-                # YouTube videos → transcript extraction
-                if _is_youtube_url(item.url):
-                    return await self._fetch_youtube_transcript(item)
-                # Regular URLs → web crawl
-                try:
-                    result = await self.crawl.crawl(
-                        CrawlRequest(
-                            url=item.url, only_main_content=True,
-                            include_html=False, timeout_ms=req.crawl_timeout_ms,
-                        )
-                    )
-                    md = result.markdown.strip()
-                    if md:
-                        return CrawledItem(
-                            url=result.url, title=result.title or item.title or "",
-                            markdown=md, search_snippet=item.content or "",
-                        )
-                    elif item.content:
-                        return CrawledItem(
-                            url=item.url, title=item.title or "",
-                            markdown=item.content, search_snippet=item.content or "",
-                        )
-                    else:
-                        return None
-                except Exception as e:
-                    logger.warning("Crawl failed for %s [%s]: %s", item.url, type(e).__name__, e)
-                    if item.content:
-                        return CrawledItem(
-                            url=item.url, title=item.title or "",
-                            markdown=item.content, search_snippet=item.content or "",
-                        )
-                    return None
-
         results = await asyncio.gather(
-            *[_process_one(item) for item in urls_to_crawl]
+            *(self._process_item(item, semaphore, req.crawl_timeout_ms) for item in urls_to_crawl)
         )
-
-        crawled_items: list[CrawledItem] = []
-        for i, result in enumerate(results):
-            if result is None:
-                errors.append(f"Failed to process {urls_to_crawl[i].url}")
-            else:
-                crawled_items.append(result)
+        crawled_items = [item for item, _, _ in results if item is not None]
 
         timings["crawl"] = round(time.time() - t1, 2)
 
@@ -320,47 +323,10 @@ class PipelineService:
         crawled_items: list[CrawledItem] = []
 
         async def _process_one_stream(item, index: int):
-            async with semaphore:
-                # YouTube videos → transcript extraction
-                if _is_youtube_url(item.url):
-                    try:
-                        crawled_item = await self._fetch_youtube_transcript(item)
-                        return crawled_item, index, None, "youtube"
-                    except Exception as e:
-                        logger.warning("YouTube transcript failed for %s [%s]: %s", item.url, type(e).__name__, e)
-                        return None, index, f"YouTube transcript failed for {item.url}: {e}", "youtube"
-                # Regular URLs → web crawl
-                try:
-                    result = await self.crawl.crawl(
-                        CrawlRequest(
-                            url=item.url, only_main_content=True,
-                            include_html=False, timeout_ms=req.crawl_timeout_ms,
-                        )
-                    )
-                    md = result.markdown.strip()
-                    if md:
-                        crawled_item = CrawledItem(
-                            url=result.url, title=result.title or item.title or "",
-                            markdown=md, search_snippet=item.content or "",
-                        )
-                        return crawled_item, index, None, "crawl"
-                    elif item.content:
-                        crawled_item = CrawledItem(
-                            url=result.url, title=result.title or item.title or "",
-                            markdown=item.content, search_snippet=item.content or "",
-                        )
-                        return crawled_item, index, None, "crawl"
-                    else:
-                        return None, index, f"Empty crawl result for {result.url}", "crawl"
-                except Exception as e:
-                    logger.warning("Crawl failed for %s [%s]: %s", item.url, type(e).__name__, e)
-                    if item.content:
-                        crawled_item = CrawledItem(
-                            url=item.url, title=item.title or "",
-                            markdown=item.content, search_snippet=item.content or "",
-                        )
-                        return crawled_item, index, None, "crawl"
-                    return None, index, f"Crawl failed for {item.url}: {e}", "crawl"
+            crawled_item, error, source = await self._process_item(
+                item, semaphore, req.crawl_timeout_ms
+            )
+            return crawled_item, index, error, source
 
         # Fire all concurrently, yield events as they complete
         tasks = [
@@ -369,10 +335,12 @@ class PipelineService:
         ]
 
         for coro in asyncio.as_completed(tasks):
-            item, idx, error, source = await coro
+            item, original_index, error, source = await coro
             if error:
                 yield _sse(PipelineStreamEvent(event="crawl_error", data={
-                    "url": urls_to_crawl[idx].url, "index": idx, "error": error,
+                    "url": urls_to_crawl[original_index].url,
+                    "index": original_index,
+                    "error": error,
                     "source": source,
                 }))
             else:
@@ -380,7 +348,7 @@ class PipelineService:
                 event_data = {
                     "url": item.url, "title": item.title,
                     "snippet": item.markdown[:300],
-                    "index": idx, "total_crawled": len(crawled_items),
+                    "index": original_index, "total_crawled": len(crawled_items),
                     "source": source,
                 }
                 if item.is_youtube:

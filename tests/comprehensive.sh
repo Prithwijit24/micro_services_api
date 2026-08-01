@@ -114,7 +114,7 @@ check "Embed single text"        200 POST "$BASE/embed" \
   '{"texts":["hello world"]}'
 check "Embed multiple texts"     200 POST "$BASE/embed" \
   '{"texts":["hello","world","python"]}'
-check "Embed edge: empty list"   200 POST "$BASE/embed" \
+check "Embed edge: empty list"   422 POST "$BASE/embed" \
   '{"texts":[]}'
 
 # ── Cache (Redis) ──────────────────────────────────────────────────

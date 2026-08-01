@@ -41,6 +41,17 @@ def get_redis() -> redis.Redis:
     return _redis_client
 
 
+async def close_shared_clients() -> None:
+    """Close shared network clients during application shutdown."""
+    global _http_client, _redis_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+    if _redis_client is not None:
+        await _redis_client.aclose()
+        _redis_client = None
+
+
 # ── Embedding Model (lazy) ────────────────────────────────────────────────
 
 _embed_model: Any = None

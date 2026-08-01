@@ -43,6 +43,11 @@ class GraphService:
             )
         return self._driver
 
+    async def close(self) -> None:
+        if self._driver is not None:
+            await self._driver.close()
+            self._driver = None
+
     @staticmethod
     def _neo4j_to_dict(obj):
         """Convert Neo4j objects to JSON-serializable dicts."""
@@ -71,16 +76,17 @@ class GraphService:
 
     async def add_node(self, req: AddNodeRequest) -> AddNodeResponse:
         label = _safe_identifier(req.label, _LABEL_RE)
+        merge_key = _safe_identifier(req.merge_key, _LABEL_RE) if req.merge_key else None
         driver = self._get_driver()
         async with driver.session() as session:
-            if req.merge_key and req.merge_key in req.properties:
+            if merge_key and merge_key in req.properties:
                 cypher = (
-                    f"MERGE (n:{label} {{{req.merge_key}: $merge_value}}) "
+                    f"MERGE (n:{label} {{{merge_key}: $merge_value}}) "
                     "SET n += $properties "
                     "RETURN elementId(n) AS node_id, n AS props"
                 )
                 params = {
-                    "merge_value": req.properties[req.merge_key],
+                    "merge_value": req.properties[merge_key],
                     "properties": req.properties,
                 }
             else:
@@ -99,12 +105,14 @@ class GraphService:
 
     async def add_edge(self, req: AddEdgeRequest) -> AddEdgeResponse:
         from_label = _safe_identifier(req.from_label, _LABEL_RE)
+        from_key = _safe_identifier(req.from_key, _LABEL_RE)
         to_label = _safe_identifier(req.to_label, _LABEL_RE)
+        to_key = _safe_identifier(req.to_key, _LABEL_RE)
         rel = _safe_identifier(req.relationship, _REL_RE)
 
         cypher = (
-            f"MATCH (a:{from_label} {{{req.from_key}: $from_value}}) "
-            f"MATCH (b:{to_label} {{{req.to_key}: $to_value}}) "
+            f"MATCH (a:{from_label} {{{from_key}: $from_value}}) "
+            f"MATCH (b:{to_label} {{{to_key}: $to_value}}) "
             f"MERGE (a)-[r:{rel}]->(b) "
             "SET r += $properties "
             "RETURN a AS from_node, b AS to_node"

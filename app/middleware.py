@@ -86,6 +86,10 @@ class AuthRateLimitMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         client_ip = get_client_ip(request)
 
+        # Liveness must remain available even when Redis is unavailable.
+        if path == "/health/live":
+            return await call_next(request)
+
         # Skip auth for public endpoints
         if path in PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
             allowed, remaining, resets_at = await check_rate_limit(f"anon:{client_ip}", RATE_LIMIT_ANON)

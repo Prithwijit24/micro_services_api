@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from chromadb.errors import InvalidCollectionException
 
 from app.models import (
     UpsertRequest,
@@ -22,10 +23,12 @@ async def upsert(req: UpsertRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/search", response_model=VectorSearchResponse)
+@router.post("/search", response_model=VectorSearchResponse, responses={404: {"description": "Collection not found"}})
 async def search(req: VectorSearchRequest):
     try:
         return await svc.search(req)
+    except InvalidCollectionException as e:
+        raise HTTPException(status_code=404, detail="Collection not found") from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

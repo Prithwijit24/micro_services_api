@@ -2,7 +2,27 @@
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, model_validator
+
+
+# ── Common responses ─────────────────────────────────────────────────────────
+
+
+class RootResponse(BaseModel):
+    service: str
+    version: str
+    docs: str
+    health: str
+    liveness: str
+
+
+class LivenessResponse(BaseModel):
+    status: str
+
+
+class HealthResponse(BaseModel):
+    status: str
+    services: dict[str, dict[str, str]]
 
 
 # ── Search ──────────────────────────────────────────────────────────────────
@@ -54,7 +74,7 @@ class BrowseResponse(BaseModel):
 
 
 class EmbedRequest(BaseModel):
-    texts: list[str]
+    texts: list[str] = Field(..., min_length=1, max_length=128)
     normalize: bool = True
 
 
@@ -119,8 +139,14 @@ class TextEmbeddingRequest(BaseModel):
 
 
 class ImageEmbeddingRequest(BaseModel):
-    image_urls: Optional[list[str]] = None
-    images_base64: Optional[list[str]] = None
+    image_urls: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+    images_base64: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def require_image_source(self):
+        if not self.image_urls and not self.images_base64:
+            raise ValueError("provide image_urls or images_base64")
+        return self
 
 
 class ClipEmbeddingResponse(BaseModel):
@@ -130,9 +156,15 @@ class ClipEmbeddingResponse(BaseModel):
 
 
 class SimilarityRequest(BaseModel):
-    text: str
-    image_urls: Optional[list[str]] = None
-    images_base64: Optional[list[str]] = None
+    text: str = Field(..., min_length=1)
+    image_urls: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+    images_base64: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def require_image_source(self):
+        if not self.image_urls and not self.images_base64:
+            raise ValueError("provide image_urls or images_base64")
+        return self
 
 
 class SimilarityResponse(BaseModel):
@@ -189,13 +221,13 @@ class AddNodeResponse(BaseModel):
 
 
 class AddEdgeRequest(BaseModel):
-    from_label: str
-    from_key: str
+    from_label: str = Field(..., min_length=1)
+    from_key: str = Field(..., min_length=1)
     from_value: Any
-    to_label: str
-    to_key: str
+    to_label: str = Field(..., min_length=1)
+    to_key: str = Field(..., min_length=1)
     to_value: Any
-    relationship: str
+    relationship: str = Field(..., min_length=1)
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -209,14 +241,14 @@ class AddEdgeResponse(BaseModel):
 
 
 class VectorRecord(BaseModel):
-    id: str
+    id: str = Field(..., min_length=1)
     embedding: list[float]
     document: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class UpsertRequest(BaseModel):
-    collection: str
+    collection: str = Field(..., min_length=1)
     records: list[VectorRecord] = Field(..., min_length=1)
 
 
@@ -226,7 +258,7 @@ class UpsertResponse(BaseModel):
 
 
 class VectorSearchRequest(BaseModel):
-    collection: str
+    collection: str = Field(..., min_length=1)
     query_embedding: list[float]
     top_k: int = Field(default=5, ge=1, le=100)
     where: Optional[dict[str, Any]] = None
@@ -245,7 +277,7 @@ class VectorSearchResponse(BaseModel):
 
 
 class VectorDeleteRequest(BaseModel):
-    collection: str
+    collection: str = Field(..., min_length=1)
     ids: list[str] = Field(..., min_length=1)
 
 
@@ -258,7 +290,7 @@ class VectorDeleteResponse(BaseModel):
 
 
 class CacheSetRequest(BaseModel):
-    key: str
+    key: str = Field(..., min_length=1)
     value: Any
     ttl_seconds: Optional[int] = Field(default=None, ge=1)
 
@@ -324,10 +356,6 @@ class DuckDBInsertResponse(BaseModel):
     error: Optional[str] = None
 
 
-class DuckDBTableRequest(BaseModel):
-    pass
-
-
 class DuckDBTableResponse(BaseModel):
     tables: list[dict[str, Any]]
     error: Optional[str] = None
@@ -388,7 +416,7 @@ class PipelineStreamEvent(BaseModel):
 
 
 class StorageUploadRequest(BaseModel):
-    key: str = Field(..., min_length=1, description="Object key/path")
+    key: str = Field(..., min_length=1, max_length=1024, description="Object key/path")
     bucket: Optional[str] = None
     content_type: Optional[str] = None
 
@@ -398,13 +426,6 @@ class StorageUploadResponse(BaseModel):
     key: str
     size: int
     url: str
-
-
-class StorageDownloadResponse(BaseModel):
-    bucket: str
-    key: str
-    content_type: str
-    size: int
 
 
 class StorageListRequest(BaseModel):
@@ -427,7 +448,7 @@ class StorageListResponse(BaseModel):
 
 
 class StorageDeleteRequest(BaseModel):
-    keys: list[str] = Field(..., min_length=1)
+    keys: list[str] = Field(..., min_length=1, max_length=100)
     bucket: Optional[str] = None
 
 
@@ -435,3 +456,101 @@ class StorageDeleteResponse(BaseModel):
     bucket: str
     deleted: int
     errors: Optional[list[str]] = None
+
+
+# ── News Search ────────────────────────────────────────────────────────────
+
+
+class NewsSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    max_results: int = Field(default=10, ge=1, le=50)
+    region: str = Field(default="wt-wt", description="Region code, e.g. us-en, wt-wt")
+    safesearch: str = Field(default="moderate", description="on, moderate, off")
+    timelimit: Optional[str] = Field(default=None, description="d, w, m, y")
+    crawl_content: bool = Field(default=False, description="Crawl full article content")
+    crawl_timeout_ms: int = Field(default=15000, ge=1000, le=60000)
+
+
+class NewsResultItem(BaseModel):
+    title: str
+    url: str
+    source: Optional[str] = None
+    published: Optional[str] = None
+    body: Optional[str] = None
+    image_url: Optional[str] = None
+    crawled_content: Optional[str] = Field(default=None, description="Full article markdown content")
+
+
+class NewsSearchResponse(BaseModel):
+    query: str
+    number_of_results: int
+    results: list[NewsResultItem]
+    timings: dict[str, float] = Field(default_factory=dict)
+
+
+# ── Image Search ───────────────────────────────────────────────────────────
+
+
+class ImageSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    max_results: int = Field(default=10, ge=1, le=50)
+    region: str = Field(default="wt-wt")
+    safesearch: str = Field(default="moderate", description="on, moderate, off")
+    size: Optional[str] = Field(default=None, description="Small, Medium, Large, Wallpaper")
+    color: Optional[str] = Field(default=None, description="color, monochrome, transparent, red, orange, etc.")
+    type_image: Optional[str] = Field(default=None, description="photo, clipart, gif, transparent, line")
+    layout: Optional[str] = Field(default=None, description="Square, Tall, Wide")
+    license_image: Optional[str] = Field(default=None, description="Any, Public, Share, ShareCommercially, Modify, ModifyCommercially")
+    use_clip: bool = Field(default=True, description="Use CLIP to rerank images by relevance")
+
+
+class ImageResultItem(BaseModel):
+    title: str
+    image_url: str
+    thumbnail_url: Optional[str] = None
+    source_url: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    clip_score: Optional[float] = Field(default=None, description="CLIP similarity score vs query")
+    engine: Optional[str] = Field(default=None, description="Source engine: ddgs, unsplash, pexels")
+
+
+class ImageSearchResponse(BaseModel):
+    query: str
+    number_of_results: int
+    results: list[ImageResultItem]
+    timings: dict[str, float] = Field(default_factory=dict)
+    clip_enabled: bool = False
+
+
+# ── Video Search ───────────────────────────────────────────────────────────
+
+
+class VideoSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    max_results: int = Field(default=10, ge=1, le=50)
+    region: str = Field(default="wt-wt")
+    safesearch: str = Field(default="moderate", description="on, moderate, off")
+    timelimit: Optional[str] = Field(default=None, description="d, w, m, y")
+    resolution: Optional[str] = Field(default=None, description="high, standard")
+    duration: Optional[str] = Field(default=None, description="short, medium, long")
+    license_video: Optional[str] = Field(default=None, description="creativeCommon, youtube")
+
+
+class VideoResultItem(BaseModel):
+    title: str
+    url: str
+    publisher: Optional[str] = None
+    duration: Optional[str] = None
+    views: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    published: Optional[str] = None
+    description: Optional[str] = None
+    engine: str = "ddgs"
+
+
+class VideoSearchResponse(BaseModel):
+    query: str
+    number_of_results: int
+    results: list[VideoResultItem]
+    timings: dict[str, float] = Field(default_factory=dict)

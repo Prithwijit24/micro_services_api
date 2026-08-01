@@ -122,7 +122,8 @@ curl https://aistackapi.duckdns.org/health
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | API info |
-| `GET` | `/health` | All 6 service health checks |
+| `GET` | `/health/live` | Liveness probe (no dependency checks) |
+| `GET` | `/health` | Readiness checks for all 6 services |
 | `GET` | `/docs` | Interactive Swagger UI |
 | `POST` | `/auth/token` | Login — get JWT token |
 
@@ -130,8 +131,8 @@ curl https://aistackapi.duckdns.org/health
 
 | Method | Path | Description | Fallback |
 |--------|------|-------------|----------|
-| `POST` | `/search` | Web search | DDGS → SearXNG |
-| `POST` | `/crawl` | URL → markdown | Scrapling → Trafilatura |
+| `POST` | `/search` | Web search | DDGS → SearXNG → Tavily → SerpAPI |
+| `POST` | `/crawl` | URL → markdown | Safe HTTP → Playwright fallback |
 | `POST` | `/browse` | Render a page | httpx (fast) |
 | `POST` | `/embed` | Text → vectors | — |
 | `POST` | `/rerank` | Score documents by relevance | — |
@@ -203,9 +204,8 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SEARCH_ENGINE` | `ddgs` | Primary search engine (`ddgs` or `searxng`) |
-| `CRAWL_ENGINE` | `trafilatura` | Primary crawl engine |
 | `AUTH_STRICT` | `true` | Reject anonymous requests |
+| `HEALTH_TIMEOUT` | `3.0` | Per-service readiness timeout in seconds |
 | `AUTH_ENABLED` | `true` | Enable authentication |
 | `CORS_ORIGINS` | (empty) | Allowed CORS origins |
 
@@ -237,8 +237,9 @@ cp .env.example .env
 | App won't start | `docker logs ai-stack-app` |
 | `Permission denied` on data dirs | `sudo chmod -R 777 data/` |
 | Embed returns error | Check `./models/` permissions |
-| Search returns empty | Try `SEARCH_ENGINE=searxng` fallback |
-| Crawl returns empty | Try `CRAWL_ENGINE=trafilatura` |
+| Search returns empty | Check DDGS/SearXNG provider connectivity and logs |
+| Crawl returns empty | Check the target URL and browser availability |
+| `/health` is degraded | Use `/health/live` for liveness; inspect the readiness service statuses |
 | Playwright browsers crash | Known Docker limitation — browse uses fast HTTP fallback |
 
 ---

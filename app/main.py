@@ -1,11 +1,42 @@
+from __future__ import annotations
+
 import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-from app.routers import register_all_routers
-from app.middleware import setup_security
 from app.auth import router as auth_router
+from app.deps import close_shared_clients, get_http_client
+from app.models import DuckDBQueryRequest, HealthResponse, LivenessResponse, RootResponse
+from app.routers import register_all_routers
+from app.routers.graph import svc as graph_service
+from app.services.duckdb import duckdb_service
+from app.services.storage import storage_service
+from app.services.crawl import close as close_crawl
+from app.services.clip import close as close_clip
+from app.services.embed import close as close_embed
+from app.services.reranker import close as close_reranker
+from app.services.youtube import close as close_youtube
+from app.middleware import setup_security
+
+HEALTH_TIMEOUT = float(os.getenv("HEALTH_TIMEOUT", "3.0"))
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await close_shared_clients()
+    await graph_service.close()
+    duckdb_service.close()
+    storage_service.close()
+    close_crawl()
+    close_clip()
+    close_embed()
+    close_reranker()
+    close_youtube()
+
 
 app = FastAPI(
     title="AI Infra Stack",
@@ -13,37 +44,35 @@ app = FastAPI(
     version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# Security middleware (CORS, rate limiting, auth, headers)
 setup_security(app)
-
-# Auth routes (token generation, API key management)
 app.include_router(auth_router)
-
-# All service routers
 register_all_routers(app)
 
 
-@app.get("/")
+@app.get("/", response_model=RootResponse)
 async def root():
     return {
         "service": "AI Infra Stack",
         "version": "2.1.0",
         "docs": "/docs",
         "health": "/health",
+        "liveness": "/health/live",
     }
 
 
-# ── Health-check timeout per service ───────────────────────────────────────
-
-HEALTH_TIMEOUT = float(os.getenv("HEALTH_TIMEOUT", "3.0"))
+@app.get("/health/live", response_model=LivenessResponse)
+async def liveness():
+    return {"status": "ok"}
 
 
 async def _check_redis() -> dict:
     r = None
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url(
             os.getenv("REDIS_URL", "redis://redis:6379/0"),
             socket_connect_timeout=HEALTH_TIMEOUT,
@@ -61,14 +90,17 @@ async def _check_neo4j() -> dict:
     driver = None
     try:
         from neo4j import AsyncGraphDatabase
-        uri = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
-        user = os.getenv("NEO4J_USER", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD", "changeme")
-        driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
+
+        driver = AsyncGraphDatabase.driver(
+            os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
+            auth=(
+                os.getenv("NEO4J_USER", "neo4j"),
+                os.getenv("NEO4J_PASSWORD", "changeme"),
+            ),
+        )
         async with driver.session() as session:
-            await asyncio.wait_for(
-                session.run("RETURN 1"), timeout=HEALTH_TIMEOUT
-            )
+            result = await asyncio.wait_for(session.run("RETURN 1"), timeout=HEALTH_TIMEOUT)
+            await asyncio.wait_for(result.consume(), timeout=HEALTH_TIMEOUT)
         return {"status": "up"}
     except Exception:
         return {"status": "down", "error": "unreachable"}
@@ -80,12 +112,12 @@ async def _check_neo4j() -> dict:
 async def _check_chromadb() -> dict:
     try:
         import chromadb
-        host = os.getenv("CHROMA_HOST", "chromadb")
-        port = int(os.getenv("CHROMA_PORT", "8000"))
-        client = chromadb.HttpClient(host=host, port=port)
-        await asyncio.wait_for(
-            asyncio.to_thread(client.heartbeat), timeout=HEALTH_TIMEOUT
+
+        client = chromadb.HttpClient(
+            host=os.getenv("CHROMA_HOST", "chromadb"),
+            port=int(os.getenv("CHROMA_PORT", "8000")),
         )
+        await asyncio.wait_for(asyncio.to_thread(client.heartbeat), timeout=HEALTH_TIMEOUT)
         return {"status": "up"}
     except Exception:
         return {"status": "down", "error": "unreachable"}
@@ -93,13 +125,11 @@ async def _check_chromadb() -> dict:
 
 async def _check_searxng() -> dict:
     try:
-        from app.deps import get_http_client
         url = os.getenv("SEARXNG_URL", "http://searxng:8080")
-        client = get_http_client()
-        resp = await asyncio.wait_for(
-            client.get(f"{url}/healthz"), timeout=HEALTH_TIMEOUT
+        response = await asyncio.wait_for(
+            get_http_client().get(f"{url}/healthz"), timeout=HEALTH_TIMEOUT
         )
-        resp.raise_for_status()
+        response.raise_for_status()
         return {"status": "up"}
     except Exception:
         return {"status": "down", "error": "unreachable"}
@@ -108,13 +138,14 @@ async def _check_searxng() -> dict:
 async def _check_minio() -> dict:
     try:
         from minio import Minio
-        endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-        access_key = os.getenv("MINIO_ROOT_USER", "minioadmin")
-        secret_key = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
-        client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=False)
-        await asyncio.wait_for(
-            asyncio.to_thread(client.list_buckets), timeout=HEALTH_TIMEOUT
+
+        client = Minio(
+            os.getenv("MINIO_ENDPOINT", "minio:9000"),
+            access_key=os.getenv("MINIO_ROOT_USER", "minioadmin"),
+            secret_key=os.getenv("MINIO_ROOT_PASSWORD", "minioadmin"),
+            secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
         )
+        await asyncio.wait_for(asyncio.to_thread(client.list_buckets), timeout=HEALTH_TIMEOUT)
         return {"status": "up"}
     except Exception:
         return {"status": "down", "error": "unreachable"}
@@ -122,19 +153,13 @@ async def _check_minio() -> dict:
 
 async def _check_duckdb() -> dict:
     try:
-        import duckdb
-        con = duckdb.connect(":memory:")
-        await asyncio.wait_for(
-            asyncio.to_thread(lambda: con.execute("SELECT 1").fetchall()),
-            timeout=HEALTH_TIMEOUT,
-        )
-        con.close()
-        return {"status": "up"}
+        result = await duckdb_service.query(DuckDBQueryRequest(sql="SELECT 1"))
+        return {"status": "up"} if result.error is None else {"status": "down", "error": "unreachable"}
     except Exception:
         return {"status": "down", "error": "unreachable"}
 
 
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 async def health():
     checks = await asyncio.gather(
         _check_redis(),
@@ -143,18 +168,8 @@ async def health():
         _check_searxng(),
         _check_minio(),
         _check_duckdb(),
-        return_exceptions=True,
     )
-    services = {
-        "redis": checks[0],
-        "neo4j": checks[1],
-        "chromadb": checks[2],
-        "searxng": checks[3],
-        "minio": checks[4],
-        "duckdb": checks[5],
-    }
-    all_up = all(s["status"] == "up" for s in services.values())
-    return {
-        "status": "ok" if all_up else "degraded",
-        "services": services,
-    }
+    services = dict(zip(("redis", "neo4j", "chromadb", "searxng", "minio", "duckdb"), checks))
+    ready = all(service["status"] == "up" for service in services.values())
+    body = {"status": "ok" if ready else "degraded", "services": services}
+    return JSONResponse(status_code=200 if ready else 503, content=body)

@@ -3,6 +3,9 @@
 *.key
 *.pem
 *.cert
+
+.env
+.env.example
 # ── Data volumes (persistent host-mounted data, never source) ────────────
 data/browser/*
 data/playwright/*

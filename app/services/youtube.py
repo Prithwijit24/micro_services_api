@@ -6,7 +6,7 @@ import asyncio
 import logging
 import tempfile
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from app.services.executors import ManagedExecutor
 
 from app.models import (
     YoutubeInfoRequest,
@@ -24,7 +24,7 @@ MAX_CONCURRENT_DOWNLOADS = int(os.getenv("YOUTUBE_MAX_CONCURRENT_DOWNLOADS", "2"
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")  # tiny, base, small, medium, large-v3
 WHISPER_MAX_DURATION = int(os.getenv("WHISPER_MAX_DURATION", "3600"))  # seconds (0 = no limit)
 
-_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_DOWNLOADS)
+_executor = ManagedExecutor(MAX_CONCURRENT_DOWNLOADS, "youtube")
 _jobs: dict[str, JobResponse] = {}
 
 # Lazy-loaded Whisper model (loaded once on first use, thread-safe)
@@ -51,7 +51,7 @@ def _get_whisper_model():
 class YoutubeService:
     async def info(self, req: YoutubeInfoRequest) -> YoutubeInfoResponse:
         loop = asyncio.get_event_loop()
-        data = await loop.run_in_executor(_executor, self._extract_info, str(req.url))
+        data = await loop.run_in_executor(_executor.get(), self._extract_info, str(req.url))
         return YoutubeInfoResponse(
             id=data.get("id"),
             title=data.get("title"),
@@ -76,7 +76,7 @@ class YoutubeService:
 
         loop = asyncio.get_event_loop()
         loop.run_in_executor(
-            _executor, self._download_worker, job_id, str(req.url), req.quality, media_type
+            _executor.get(), self._download_worker, job_id, str(req.url), req.quality, media_type
         )
         return job
 
@@ -116,7 +116,7 @@ class YoutubeService:
     async def transcript(self, req: TranscriptRequest) -> TranscriptResponse:
         loop = asyncio.get_event_loop()
         data = await loop.run_in_executor(
-            _executor, self._extract_transcript, str(req.url), req.language, req.force_whisper
+            _executor.get(), self._extract_transcript, str(req.url), req.language, req.force_whisper
         )
         return TranscriptResponse(
             id=data["id"], language=req.language, segments=data["segments"],
@@ -236,6 +236,10 @@ class YoutubeService:
                 "source": "whisper",
                 "whisper_model": WHISPER_MODEL,
             }
+
+
+def close() -> None:
+    _executor.close()
 
 
 youtube_service = YoutubeService()
