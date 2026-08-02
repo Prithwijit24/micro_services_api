@@ -221,7 +221,7 @@ echo ""
 echo "── Auth management ──"
 TOKEN=$(curl -sk -X POST "$BASE/auth/token" \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"b6dc002b5cf63579a76a753dc4b2a78e"}' 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
+  -d '{"username":"admin","password":"'"$ADMIN_PASS"'"}' 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
 
 if [ -n "$TOKEN" ]; then
   check_auth() {

@@ -18,6 +18,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        # ubuntu-latest ships system python3 without pip; setup-python also
+        # bootstraps pip, caches the install between runs, and pins the
+        # interpreter explicitly so behavior is reproducible.
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Verify Chroma client/server alignment
         run: |
           client=$(grep -oP 'chromadb==\K[0-9.]+' pyproject.toml)
@@ -34,6 +42,10 @@ jobs:
           ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
         run: bash tests/comprehensive.sh
 
+      - name: Install Python test dependency (httpx)
+        # db_read_test.py uses httpx — Ubuntu's bare python3 doesn't ship with it
+        run: pip install httpx
+
       - name: Run read-only database checks
         env:
           ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
@@ -45,10 +57,29 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const issue = await github.rest.issues.create({
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let failedSteps = '';
+            try {
+              const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+              });
+              failedSteps = (jobs || [])
+                .flatMap(j => j.steps || [])
+                .filter(s => s.conclusion === 'failure')
+                .map(s => `\n- \`${s.name}\``)
+                .join('');
+            } catch (e) {
+              core.warning(`Could not list failed steps: ${e.message}`);
+            }
+            const body = `The 6-hourly API health check failed.${
+              failedSteps ? `\n\n**Failed steps:**${failedSteps}` : ''
+            }\n\nFull workflow log: ${runUrl}`;
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🚨 API health check failed — ${new Date().toISOString()}`,
-              body: `The 6-hourly API health check failed. Check the [workflow run](${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) for details.`,
+              body,
               labels: ['bug', 'ci']
             });
